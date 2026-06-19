@@ -24,6 +24,7 @@ import { TerminalTabs } from "./components/TerminalTabs";
 import { ApprovalBanner } from "./components/ApprovalBanner";
 import { TelegramStatus } from "./components/TelegramStatus";
 import { AccessPanel } from "./components/AccessPanel";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 type Surface = "agents" | "servers" | "terminal";
 
@@ -56,6 +57,16 @@ function TokenRequired() {
 }
 
 export function App() {
+  // Top-level boundary: nothing below this can ever produce a blank page.
+  // Worst case the user sees a readable error + a Reload button.
+  return (
+    <ErrorBoundary label="Founder">
+      <AppShell />
+    </ErrorBoundary>
+  );
+}
+
+function AppShell() {
   const [surface, setSurface] = useState<Surface>("agents");
 
   // Token gate — render the notice before any hook that would make data calls.
@@ -77,6 +88,9 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
 
   // The "Access from anywhere" drawer — opened from the Header's Connect button.
   const [accessOpen, setAccessOpen] = useState(false);
+  // Bumped to remount the terminal subtree when its boundary is reset, giving
+  // the user a clean retry without reloading the whole dashboard.
+  const [terminalKey, setTerminalKey] = useState(0);
 
   const activeCount = sessions.filter(
     (s) => s.status === "active" || s.status === "waiting",
@@ -84,6 +98,17 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
 
   const agents = <AgentsPanel sessions={sessions} now={now} cost={cost} />;
   const serversPanel = <ServersPanel servers={servers} />;
+
+  // A terminal/xterm crash is contained to this boundary — the Agents and
+  // Servers panels stay usable. "Try again" remounts a fresh TerminalTabs.
+  const terminal = (
+    <ErrorBoundary
+      label="Terminal"
+      onReset={() => setTerminalKey((k) => k + 1)}
+    >
+      <TerminalTabs key={terminalKey} />
+    </ErrorBoundary>
+  );
 
   return (
     <div className="flex h-screen flex-col" style={{ backgroundColor: "var(--color-void)" }}>
@@ -138,7 +163,7 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
       {surface === "terminal" ? (
         <main className="min-h-0 flex-1 p-1.5 lg:hidden">
           <section className="panel flex h-full min-h-0 flex-col overflow-hidden" aria-label="Terminal">
-            <TerminalTabs />
+            {terminal}
           </section>
         </main>
       ) : (
@@ -165,7 +190,7 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
           </section>
         </div>
         <section className="panel min-h-0 overflow-hidden" aria-label="Terminal">
-          <TerminalTabs />
+          {terminal}
         </section>
       </div>
     </div>

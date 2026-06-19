@@ -5,7 +5,7 @@
  * a placeholder instead of crashing.
  */
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import fastifyStatic from "@fastify/static";
@@ -49,6 +49,18 @@ function sendHtml(reply: FastifyReply, code: number, html: string): void {
   reply.code(code).header("content-type", "text/html; charset=utf-8").send(html);
 }
 
+// Cache-control policy:
+//   - The SPA document must be revalidated every load so a new bundle hash is
+//     always picked up (no stale render-loop bundle stuck in cache).
+//   - Content-hashed assets under /assets/* are safe to cache forever.
+const HTML_CACHE_CONTROL = "no-cache";
+const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+/** True for files Vite emits under /assets with a content hash in the name. */
+function isHashedAsset(filePath: string): boolean {
+  return filePath.includes(`${sep}assets${sep}`);
+}
+
 function isProtectedPath(url: string): boolean {
   const path = url.split("?")[0] ?? "";
   return path === "/" || path === "/index.html";
@@ -80,10 +92,24 @@ export function registerStatic(app: FastifyInstance, ctx: AppContext): void {
     return;
   }
 
-  app.register(fastifyStatic, { root: webDist, wildcard: false });
+  app.register(fastifyStatic, {
+    root: webDist,
+    wildcard: false,
+    // We set Cache-Control ourselves per path; disable @fastify/static's own.
+    cacheControl: false,
+    setHeaders: (res, filePath) => {
+      // Hash-named assets are immutable; everything else (index.html) must be
+      // revalidated so a fresh bundle hash is always picked up.
+      res.setHeader(
+        "Cache-Control",
+        isHashedAsset(filePath) ? IMMUTABLE_CACHE_CONTROL : HTML_CACHE_CONTROL,
+      );
+    },
+  });
 
   // SPA fallback: serve index.html for GET non-/api, non-/events, non-/stream
-  // routes; otherwise return JSON 404.
+  // routes; otherwise return JSON 404. The fallback document must also be
+  // revalidated — reply.sendFile bypasses setHeaders above, so set it here.
   app.setNotFoundHandler((req: FastifyRequest, reply: FastifyReply) => {
     const path = req.url.split("?")[0] ?? "";
     const isApi =
@@ -93,6 +119,7 @@ export function registerStatic(app: FastifyInstance, ctx: AppContext): void {
       path === "/healthz" ||
       path === "/v1/metrics";
     if (req.method === "GET" && !isApi) {
+      reply.header("Cache-Control", HTML_CACHE_CONTROL);
       reply.sendFile("index.html");
       return;
     }

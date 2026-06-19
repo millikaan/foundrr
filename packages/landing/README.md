@@ -1,6 +1,6 @@
-# Mission Control — Landing
+# Founder — Landing
 
-Standalone Next.js (App Router) marketing/stats page for Mission Control.
+Standalone Next.js (App Router) marketing/stats page for Founder.
 Deploys to Vercel **independently** of the daemon/dashboard workspace — it does
 not import `@mission-control/shared` and is excluded from the npm workspaces in
 the repo root.
