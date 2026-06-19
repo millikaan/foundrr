@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { CostSnapshot } from "@mission-control/shared";
 import type { StreamStatus } from "../lib/useStream";
 import { CostMeter } from "./CostMeter";
+import { ModelPicker } from "./ModelPicker";
 
 interface HeaderProps {
   status: StreamStatus;
@@ -67,6 +68,9 @@ export function Header({ status, activeCount, cost, telegram, onOpenAccess }: He
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          {/* Pick your AI — tags telemetry + the global leaderboard bucket. */}
+          <ModelPicker />
+
           {/* Away-surface enabler — visible on desktop AND mobile. */}
           <button
             type="button"

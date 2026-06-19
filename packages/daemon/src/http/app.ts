@@ -12,6 +12,7 @@ import { registerTermRoute } from "../ws/term.js";
 import type { AppContext } from "./context.js";
 import { registerAccessRoutes } from "./routes/access.js";
 import { registerApprovalsRoutes } from "./routes/approvals.js";
+import { registerConfigRoutes } from "./routes/config.js";
 import { registerEventsRoute } from "./routes/events.js";
 import { registerGitRoute } from "./routes/git.js";
 import { registerHealthRoute } from "./routes/health.js";
@@ -44,6 +45,8 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerTelegramRoute(app, ctx);
   // "Access from anywhere" panel — addresses + managed tunnel (token-protected).
   registerAccessRoutes(app, ctx);
+  // Local preferences — model picker backing (token-protected).
+  registerConfigRoutes(app, ctx);
   // OTLP cost/token receiver — PUBLIC (no token); see otel/receiver.ts.
   registerOtelRoute(app, ctx);
   registerStreamRoute(app, ctx);

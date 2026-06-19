@@ -318,6 +318,32 @@ export function stopTunnel(): Promise<AccessTunnel> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Config — local daemon preferences backing the model picker.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Shape of `GET /api/config`. */
+export interface DaemonConfig {
+  /** The chosen model/agent key (a stable key from the shared MODELS registry). */
+  model: string;
+  /** Whether anonymous global usage sharing is on. */
+  telemetryShare: boolean;
+}
+
+/** Fetch the current daemon config (model + telemetry-share). */
+export function getConfig(): Promise<DaemonConfig> {
+  return apiGet<DaemonConfig>("/api/config");
+}
+
+/**
+ * Set the active model/agent key. Throws `ApiError` (status 400) when the key
+ * is not in the shared registry, or on a missing token / network / 5xx error;
+ * callers revert their optimistic update and surface the failure.
+ */
+export async function setModelApi(model: string): Promise<void> {
+  await apiPost<{ ok: true; model: string }>("/api/config/model", { model });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Telegram (M6) — link status for the away-surface indicator.
 // ─────────────────────────────────────────────────────────────────────────────
 
