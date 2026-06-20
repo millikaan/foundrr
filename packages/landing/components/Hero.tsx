@@ -75,12 +75,22 @@ export function Hero() {
         </h1>
 
         <p
-          className="rise mx-auto mt-7 max-w-2xl text-lg sm:text-2xl text-muted leading-relaxed text-balance"
+          className="rise mx-auto mt-7 max-w-2xl text-xl sm:text-3xl font-medium text-text leading-snug tracking-[-0.01em] text-balance"
           style={{ animationDelay: "120ms" }}
         >
           Supervise your AI coding agents from anywhere — and watch the
           world&apos;s{" "}
-          <span className="text-text">token spend in real time.</span>
+          <span className="text-signal signal-glow-soft">
+            token spend in real time.
+          </span>
+        </p>
+
+        <p
+          className="rise mx-auto mt-5 max-w-xl text-base sm:text-lg text-muted leading-relaxed text-balance"
+          style={{ animationDelay: "150ms" }}
+        >
+          A local command center for your terminal agents. Approve prompts from
+          your phone, track every token, and keep your code on your machine.
         </p>
 
         <div

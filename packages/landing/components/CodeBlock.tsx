@@ -52,6 +52,12 @@ function CheckIcon() {
 
 /**
  * A dark terminal-style code block with a working copy-to-clipboard button.
+ *
+ * Layout: the command scrolls horizontally inside its own track (mono, no-wrap,
+ * `overflow-x-auto`) so even long commands stay fully readable. The copy button
+ * lives in a separate, non-shrinking column to the right — it never overlaps
+ * the command text. A right-edge fade hints there's more to scroll into view.
+ *
  * Client component (clipboard + transient "Copied" state). Falls back silently
  * if the Clipboard API is unavailable so the page never crashes.
  */
@@ -74,20 +80,31 @@ export function CodeBlock({
   }, [code]);
 
   return (
-    <div className="group/code relative flex items-stretch overflow-hidden rounded-lg border border-line bg-[color-mix(in_srgb,var(--void-2)_88%,transparent)]">
-      <pre className="min-w-0 flex-1 overflow-x-auto px-4 py-3">
-        <code className="font-mono text-[0.82rem] sm:text-sm leading-relaxed text-text">
-          {prompt ? (
-            <span className="select-none text-faint">{prompt} </span>
-          ) : null}
-          {code}
-        </code>
-      </pre>
+    <div className="group/code flex items-stretch overflow-hidden rounded-lg border border-line bg-[color-mix(in_srgb,var(--void-2)_92%,transparent)]">
+      {/* Scroll track — owns horizontal overflow so the full command is always
+          reachable. min-w-0 lets it shrink instead of pushing the button off. */}
+      <div className="relative min-w-0 flex-1">
+        <pre className="overflow-x-auto px-4 py-3 [scrollbar-width:thin]">
+          <code className="block whitespace-nowrap font-mono text-[0.82rem] sm:text-sm leading-relaxed text-text">
+            {prompt ? (
+              <span className="select-none text-faint">{prompt} </span>
+            ) : null}
+            {code}
+          </code>
+        </pre>
+        {/* Right-edge fade: cue that the command scrolls under the copy button. */}
+        <span
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[color-mix(in_srgb,var(--void-2)_92%,transparent)] to-transparent"
+          aria-hidden
+        />
+      </div>
+
+      {/* Copy button — fixed column, never shrinks, never covers the command. */}
       <button
         type="button"
         onClick={onCopy}
         aria-label={copied ? "Copied" : copyLabel}
-        className="flex shrink-0 items-center gap-1.5 border-l border-line px-3 text-xs font-medium text-muted transition-colors hover:bg-panel hover:text-text"
+        className="flex shrink-0 items-center gap-1.5 self-stretch border-l border-line bg-[color-mix(in_srgb,var(--panel)_55%,transparent)] px-3 text-xs font-medium text-muted transition-colors hover:bg-panel hover:text-text"
       >
         {copied ? (
           <span className="flex items-center gap-1.5 text-ok">

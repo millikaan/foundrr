@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AgentInstaller } from "@/components/AgentInstaller";
 import { CodeBlock } from "@/components/CodeBlock";
 import { GITHUB_URL } from "@/lib/config";
 
@@ -18,10 +19,6 @@ export const metadata: Metadata = {
     siteName: "Founder",
   },
 };
-
-const AMAZON_Q_DOCS_URL =
-  "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html";
-const CLAUDE_CODE_URL = "https://claude.com/claude-code";
 
 /** Ordered, copy-able install steps. Each renders as a numbered card. */
 const INSTALL_STEPS: ReadonlyArray<{
@@ -68,36 +65,17 @@ const INSTALL_STEPS: ReadonlyArray<{
   },
 ];
 
-/** Terminal coding agents — each with a one-line install command. */
-const TERMINAL_AGENTS: ReadonlyArray<{
-  name: string;
-  command: string;
-  note?: string;
-  link?: { href: string; label: string };
-}> = [
-  {
-    name: "Claude Code",
-    command: "npm install -g @anthropic-ai/claude-code",
-    link: { href: CLAUDE_CODE_URL, label: "claude.com/claude-code" },
-  },
-  {
-    name: "OpenAI Codex",
-    command: "npm install -g @openai/codex",
-  },
-  {
-    name: "Gemini CLI",
-    command: "npm install -g @google/gemini-cli",
-  },
-  {
-    name: "Aider",
-    command: "pipx install aider-chat",
-  },
+/** The three top-level phases, surfaced as a stepper at the top of the page. */
+const PHASES: ReadonlyArray<{ n: string; label: string; href: string }> = [
+  { n: "01", label: "Install Founder", href: "#install" },
+  { n: "02", label: "Install your agent", href: "#agent" },
+  { n: "03", label: "Supervise anywhere", href: "#supervise" },
 ];
 
 function StepNumber({ n }: { n: number }) {
   return (
     <span
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--signal)_45%,var(--line))] bg-[color-mix(in_srgb,var(--signal)_10%,transparent)] font-mono text-sm font-semibold text-signal"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--signal)_45%,var(--line))] bg-[color-mix(in_srgb,var(--signal)_10%,transparent)] font-mono text-sm font-semibold text-signal"
       aria-hidden
     >
       {n}
@@ -208,8 +186,15 @@ export default function SetupPage() {
           className="absolute inset-0 hero-glow pointer-events-none"
           aria-hidden
         />
-        <div className="relative mx-auto max-w-4xl px-5 pt-20 pb-14 sm:pt-28 sm:pb-20">
+        <div className="relative mx-auto max-w-4xl px-5 pt-20 pb-16 sm:pt-28 sm:pb-20">
           <div className="rise inline-flex items-center gap-2 rounded-full border border-line bg-[color-mix(in_srgb,var(--panel)_75%,transparent)] px-3.5 py-1.5 backdrop-blur-sm">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="pulse-dot absolute inset-0" aria-hidden />
+              <span
+                className="relative inline-block h-1.5 w-1.5 rounded-full bg-signal"
+                aria-hidden
+              />
+            </span>
             <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted">
               Get started
             </span>
@@ -248,27 +233,58 @@ export default function SetupPage() {
               View on GitHub
             </a>
           </div>
+
+          {/* Phase stepper — three jump links that double as a progress map. */}
+          <nav
+            aria-label="Setup phases"
+            className="rise mt-12 grid gap-2.5 sm:grid-cols-3"
+            style={{ animationDelay: "240ms" }}
+          >
+            {PHASES.map((phase, i) => (
+              <a
+                key={phase.n}
+                href={phase.href}
+                className="card-hover group flex items-center gap-3 rounded-xl border border-line bg-[color-mix(in_srgb,var(--panel)_60%,transparent)] px-4 py-3.5 backdrop-blur-sm hover:border-[color-mix(in_srgb,var(--signal)_35%,var(--line))]"
+              >
+                <span className="font-mono text-sm font-semibold text-signal">
+                  {phase.n}
+                </span>
+                <span className="text-sm font-medium text-text">
+                  {phase.label}
+                </span>
+                {i < PHASES.length - 1 ? (
+                  <span
+                    className="ml-auto hidden h-px w-6 bg-gradient-to-r from-line to-transparent sm:block"
+                    aria-hidden
+                  />
+                ) : null}
+              </a>
+            ))}
+          </nav>
         </div>
       </header>
 
       {/* ── 1. Install Founder ─────────────────────────────────────────── */}
       <section
         id="install"
-        className="mx-auto max-w-4xl px-5 py-16 sm:py-24 scroll-mt-20"
+        className="mx-auto max-w-4xl px-5 py-20 sm:py-28 scroll-mt-20"
       >
         <SectionHeading eyebrow="Step 1" title="Install Founder">
           Seven commands, top to bottom. Each step has a copy button — paste it
           into your terminal and move on.
         </SectionHeading>
 
-        <ol className="mt-10 space-y-4">
+        {/* Numbered steps with a continuous connector spine on the left. */}
+        <ol className="relative mt-12 space-y-4 sm:before:absolute sm:before:left-[1.125rem] sm:before:top-6 sm:before:bottom-6 sm:before:w-px sm:before:bg-gradient-to-b sm:before:from-[color-mix(in_srgb,var(--signal)_35%,var(--line))] sm:before:via-line sm:before:to-transparent">
           {INSTALL_STEPS.map((step, i) => (
             <li
               key={step.command}
-              className="card-hover rounded-xl border border-line bg-panel p-5 sm:p-6"
+              className="card-hover relative rounded-xl border border-line bg-panel p-5 sm:p-6"
             >
               <div className="flex items-start gap-4">
-                <StepNumber n={i + 1} />
+                <span className="relative z-10 bg-panel sm:-ml-0.5">
+                  <StepNumber n={i + 1} />
+                </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="font-display text-base font-semibold text-text">
                     {step.title}
@@ -295,80 +311,29 @@ export default function SetupPage() {
         </div>
       </section>
 
-      {/* ── 2. Install your AI agent ───────────────────────────────────── */}
-      <section className="border-t border-line bg-void-2/40">
-        <div className="mx-auto max-w-4xl px-5 py-16 sm:py-24">
+      {/* ── 2. Install your AI agent (tabbed picker) ───────────────────── */}
+      <section
+        id="agent"
+        className="border-t border-line bg-void-2/40 scroll-mt-20"
+      >
+        <div className="mx-auto max-w-4xl px-5 py-20 sm:py-28">
           <SectionHeading eyebrow="Step 2" title="Install your AI agent">
             Don&apos;t have the agent installed? Founder tells you right in the
-            terminal — here&apos;s how to get each one.
+            terminal. Pick yours below for the exact one-line install.
           </SectionHeading>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
-            {TERMINAL_AGENTS.map((agent) => (
-              <div
-                key={agent.name}
-                className="card-hover flex flex-col rounded-xl border border-line bg-panel p-5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display text-base font-semibold text-text">
-                    {agent.name}
-                  </h3>
-                  {agent.link ? (
-                    <a
-                      href={agent.link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-mono text-[0.7rem] text-faint transition-colors hover:text-cool"
-                    >
-                      {agent.link.label}
-                      <ExternalIcon />
-                    </a>
-                  ) : null}
-                </div>
-                <div className="mt-4">
-                  <CodeBlock code={agent.command} prompt="" />
-                </div>
-              </div>
-            ))}
-
-            {/* Amazon Q — docs link instead of an inline command */}
-            <div className="card-hover flex flex-col rounded-xl border border-line bg-panel p-5 sm:col-span-2">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-display text-base font-semibold text-text">
-                  Amazon Q
-                </h3>
-              </div>
-              <p className="mt-2 text-sm text-muted leading-relaxed">
-                The Amazon Q Developer CLI installs per-platform. Follow AWS&apos;s
-                official guide for your OS.
-              </p>
-              <a
-                href={AMAZON_Q_DOCS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex w-fit items-center gap-2 rounded-lg border border-line bg-[color-mix(in_srgb,var(--void-2)_88%,transparent)] px-4 py-2.5 text-sm font-medium text-text transition-colors hover:border-[var(--cool)] hover:text-cool"
-              >
-                AWS Amazon Q Developer CLI docs
-                <ExternalIcon />
-              </a>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-line bg-[color-mix(in_srgb,var(--panel)_60%,transparent)] p-5">
-            <p className="text-sm text-muted leading-relaxed">
-              <span className="font-medium text-text">IDE-based tools</span> —
-              Cursor, GitHub Copilot, Cline, Windsurf, and Continue run inside
-              your editor, not as a standalone terminal agent. Founder supervises
-              terminal agents, so there&apos;s nothing to install on the CLI for
-              those.
-            </p>
+          <div className="mt-12">
+            <AgentInstaller />
           </div>
         </div>
       </section>
 
       {/* ── 3. Pick your model & supervise from anywhere ───────────────── */}
-      <section className="border-t border-line">
-        <div className="mx-auto max-w-4xl px-5 py-16 sm:py-24">
+      <section
+        id="supervise"
+        className="border-t border-line scroll-mt-20"
+      >
+        <div className="mx-auto max-w-4xl px-5 py-20 sm:py-28">
           <SectionHeading
             eyebrow="Step 3"
             title="Pick your model & supervise from anywhere"
@@ -377,8 +342,8 @@ export default function SetupPage() {
             over your network.
           </SectionHeading>
 
-          <div className="mt-10 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-xl border border-line bg-panel p-5">
+          <div className="mt-12 grid gap-4 lg:grid-cols-3">
+            <div className="card-hover rounded-xl border border-line bg-panel p-5 sm:p-6">
               <h3 className="font-display text-base font-semibold text-text">
                 Pick your model
               </h3>
@@ -387,11 +352,11 @@ export default function SetupPage() {
                 header.
               </p>
               <div className="mt-4">
-                <CodeBlock code="mc config model <key>" prompt="" />
+                <CodeBlock code="mc config model <key>" prompt="$" />
               </div>
             </div>
 
-            <div className="rounded-xl border border-line bg-panel p-5">
+            <div className="card-hover rounded-xl border border-line bg-panel p-5 sm:p-6">
               <h3 className="font-display text-base font-semibold text-text">
                 Leash to your phone
               </h3>
@@ -403,11 +368,11 @@ export default function SetupPage() {
                 to get remote Approve / Deny on your phone.
               </p>
               <div className="mt-4">
-                <CodeBlock code="mc telegram link" prompt="" />
+                <CodeBlock code="mc telegram link" prompt="$" />
               </div>
             </div>
 
-            <div className="rounded-xl border border-line bg-panel p-5">
+            <div className="card-hover rounded-xl border border-line bg-panel p-5 sm:p-6">
               <h3 className="font-display text-base font-semibold text-text">
                 LAN / Tailscale access
               </h3>
@@ -416,7 +381,7 @@ export default function SetupPage() {
                 another device on your network.
               </p>
               <div className="mt-4">
-                <CodeBlock code="HOST=0.0.0.0 mc start" prompt="" />
+                <CodeBlock code="HOST=0.0.0.0 mc start" prompt="$" />
               </div>
             </div>
           </div>
@@ -425,13 +390,13 @@ export default function SetupPage() {
 
       {/* ── 4. Telemetry (transparent) ─────────────────────────────────── */}
       <section className="border-t border-line bg-void-2/40">
-        <div className="mx-auto max-w-4xl px-5 py-16 sm:py-24">
+        <div className="mx-auto max-w-4xl px-5 py-20 sm:py-28">
           <SectionHeading eyebrow="Transparent by design" title="Telemetry">
             Founder shares anonymous usage — your install id, the model you run,
             and token/cost counts. Never your code, file paths, or prompts.
           </SectionHeading>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          <div className="mt-12 grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-line bg-panel p-6">
               <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-ok">
                 On by default
@@ -452,7 +417,7 @@ export default function SetupPage() {
                 that.
               </p>
               <div className="mt-4">
-                <CodeBlock code="mc telemetry share off" prompt="" />
+                <CodeBlock code="mc telemetry share off" prompt="$" />
               </div>
             </div>
           </div>

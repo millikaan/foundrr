@@ -55,7 +55,7 @@ export function Telemetry() {
         <p className="font-mono text-[0.7rem] uppercase tracking-[0.24em] text-cool">
           // telemetry disclosure
         </p>
-        <h2 className="mt-2 font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+        <h2 className="mt-2 font-display text-3xl sm:text-5xl font-bold tracking-[-0.02em]">
           The honest part
         </h2>
         <p className="mt-3 text-muted leading-relaxed">
