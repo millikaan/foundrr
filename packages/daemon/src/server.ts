@@ -4,17 +4,21 @@
 import type Database from "better-sqlite3";
 
 import { TunnelManager } from "./access/tunnel-manager.js";
+import { SharedApprovalPoller } from "./approvals/shared-poller.js";
 import { ApprovalStore } from "./approvals/store.js";
 import { localDashboardUrl } from "./cli/dashboard-url.js";
 import type { Config } from "./config.js";
 import { CostStore } from "./cost/store.js";
 import { openDb } from "./db/index.js";
+import { getSettings } from "./db/settings-repo.js";
 import { EventHub } from "./events/event-hub.js";
 import { buildApp } from "./http/app.js";
 import { PreviewProxyService } from "./preview/proxy-service.js";
 import { PtyManager } from "./pty/manager.js";
 import { ServerMonitor } from "./servers/monitor.js";
 import { TelegramService } from "./telegram/bot.js";
+import { SharedBot } from "./telegram/shared-bot.js";
+import { resolveInstallId } from "./telemetry/install-id.js";
 import { TelemetryReporter } from "./telemetry/reporter.js";
 import { StreamRegistry } from "./ws/registry.js";
 
@@ -63,15 +67,35 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
   const approvalStore = new ApprovalStore(registry, db);
   approvalStore.start();
 
-  // The leash (M6/M7): Telegram service. Degrades to a no-op when no bot token
-  // is configured, so the daemon runs fine without it.
+  // The leash (M6/M7): LOCAL grammY Telegram service ("own" mode). Degrades to
+  // a no-op when no bot token is configured, so the daemon runs fine without it.
   const telegram = new TelegramService({ db, approvalStore, ptyManager, config });
   telegram.start();
 
-  // Notify on session edges (Stop → idle, Notification → waiting) via Telegram.
-  // Wired here so the EventHub stays decoupled from the Telegram service.
+  // The Founder shared cloud bot (P7, "shared" mode — the default). One bot,
+  // many installs; the anonymous install id is this install's identity. All
+  // calls swallow errors so a relay failure never affects the daemon.
+  const sharedBot = new SharedBot(resolveInstallId(config.home));
+  // Bridges shared-bot decisions back into the LOCAL approval store so the hook
+  // (which polls the local id) and the dashboard both resolve.
+  const sharedApprovalPoller = new SharedApprovalPoller(sharedBot, approvalStore);
+
+  // Notify on session edges (Stop → idle, Notification → waiting). Route through
+  // the shared cloud bot in "shared" mode, the local bot in "own" mode, nothing
+  // in "off" mode. Wired here so the EventHub stays decoupled. The mode is read
+  // per-notification so a `mc telegram mode` change takes effect without a restart.
   eventHub.setNotifier((text) => {
-    void telegram.notify(text);
+    let mode: "shared" | "own" | "off" = "shared";
+    try {
+      mode = getSettings(db).telegramMode;
+    } catch {
+      mode = "shared";
+    }
+    if (mode === "shared") {
+      void sharedBot.notify(text);
+    } else if (mode === "own") {
+      void telegram.notify(text);
+    }
   });
 
   const app = await buildApp({
@@ -85,6 +109,8 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     costStore,
     approvalStore,
     telegram,
+    sharedBot,
+    sharedApprovalPoller,
     tunnelManager,
   });
 
@@ -98,6 +124,7 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     costStore.stop();
     telemetryReporter.stop();
     approvalStore.stop();
+    sharedApprovalPoller.stopAll();
     void telegram.stop();
     tunnelManager.stop();
     db.close();
@@ -115,6 +142,8 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     costStore.stop();
     telemetryReporter.stop();
     approvalStore.stop();
+    // Stop any in-flight shared-approval pollers before tearing down the bot.
+    sharedApprovalPoller.stopAll();
     await telegram.stop();
     // Tear down any managed public tunnel so it never outlives the daemon.
     tunnelManager.stop();

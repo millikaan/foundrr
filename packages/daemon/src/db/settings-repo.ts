@@ -12,11 +12,33 @@ import type Database from "better-sqlite3";
 
 import { DEFAULT_MODEL } from "@mission-control/shared";
 
+/**
+ * How approval gating + notifications are routed:
+ *   - "shared" : the Founder shared cloud bot (one bot, many installs). Default.
+ *   - "own"    : the user's own grammY bot (M6/M7 local path).
+ *   - "off"    : no Telegram leash at all.
+ */
+export type TelegramMode = "shared" | "own" | "off";
+
+const TELEGRAM_MODES: ReadonlySet<TelegramMode> = new Set<TelegramMode>([
+  "shared",
+  "own",
+  "off",
+]);
+
+/** Narrow an untrusted string to a valid TelegramMode, defaulting to "shared". */
+export function coerceTelegramMode(value: string | null | undefined): TelegramMode {
+  return value && TELEGRAM_MODES.has(value as TelegramMode)
+    ? (value as TelegramMode)
+    : "shared";
+}
+
 interface SettingsRow {
   telemetry_share: number;
   model: string | null;
   last_tokens: number;
   last_cost: number;
+  telegram_mode: string | null;
 }
 
 export interface Settings {
@@ -24,6 +46,7 @@ export interface Settings {
   readonly model: string;
   readonly lastTokens: number;
   readonly lastCost: number;
+  readonly telegramMode: TelegramMode;
 }
 
 const DEFAULTS: Settings = {
@@ -31,13 +54,14 @@ const DEFAULTS: Settings = {
   model: DEFAULT_MODEL,
   lastTokens: 0,
   lastCost: 0,
+  telegramMode: "shared",
 };
 
 /** Read the singleton settings row, falling back to schema defaults. */
 export function getSettings(db: Database.Database): Settings {
   const row = db
     .prepare(
-      "SELECT telemetry_share, model, last_tokens, last_cost FROM settings WHERE id = 1",
+      "SELECT telemetry_share, model, last_tokens, last_cost, telegram_mode FROM settings WHERE id = 1",
     )
     .get() as SettingsRow | undefined;
   if (!row) {
@@ -48,7 +72,17 @@ export function getSettings(db: Database.Database): Settings {
     model: row.model ?? DEFAULT_MODEL,
     lastTokens: row.last_tokens ?? 0,
     lastCost: row.last_cost ?? 0,
+    telegramMode: coerceTelegramMode(row.telegram_mode),
   };
+}
+
+/** Persist the Telegram routing mode, preserving other fields. */
+export function setTelegramMode(db: Database.Database, mode: TelegramMode): void {
+  db.prepare(
+    `INSERT INTO settings (id, telegram_mode)
+     VALUES (1, @mode)
+     ON CONFLICT(id) DO UPDATE SET telegram_mode = excluded.telegram_mode`,
+  ).run({ mode });
 }
 
 /** Toggle anonymous global usage sharing on/off, preserving other fields. */

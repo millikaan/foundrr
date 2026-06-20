@@ -19,6 +19,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ApiError } from "@mission-control/shared";
 
 import { isGated } from "../../approvals/policy.js";
+import { getSettings } from "../../db/settings-repo.js";
 import { getTelegram } from "../../db/telegram-repo.js";
 import { projectFromCwd } from "../../events/describe.js";
 import type { AppContext } from "../context.js";
@@ -69,16 +70,25 @@ export function registerApprovalsRoutes(
           return reply.send({ gated: false });
         }
 
-        // Only engage the gate when a remote approver actually exists. The
-        // leash is for *remote* supervision: until a Telegram chat is linked,
-        // nobody can tap Approve/Deny from away, so gating would just stall
-        // every Bash/edit for ~50s before falling back to the local prompt —
-        // exactly the at-keyboard friction we want to avoid. With no linked
-        // chat we report "not gated" so Claude Code's normal local permission
-        // flow handles it instantly. Link Telegram (`mc telegram setup` +
-        // `/link`) and the gate engages as configured.
-        const linked = Boolean(getTelegram(ctx.db).chatId);
-        if (!linked) {
+        // Only engage the gate when a remote approver actually exists, in the
+        // configured mode. The leash is for *remote* supervision: with no
+        // reachable approver, gating would stall every Bash/edit for ~50s
+        // before the local prompt fallback — exactly the at-keyboard friction
+        // we avoid. So when no approver is available we report "not gated" and
+        // Claude Code's normal local permission flow handles it instantly.
+        //
+        //   - "shared": gate when this install is linked to the Founder cloud
+        //               bot (sharedBot.isLinked()).
+        //   - "own"   : gate when a LOCAL grammY chat is linked (getTelegram).
+        //   - "off"   : never gate.
+        const mode = getSettings(ctx.db).telegramMode;
+
+        const sharedLinked =
+          mode === "shared" ? await ctx.sharedBot.isLinked() : false;
+        const ownLinked =
+          mode === "own" ? Boolean(getTelegram(ctx.db).chatId) : false;
+
+        if (!sharedLinked && !ownLinked) {
           return reply.send({ gated: false });
         }
 
@@ -86,6 +96,8 @@ export function registerApprovalsRoutes(
         const cwd = str(body.cwd);
         const project = projectFromCwd(cwd);
 
+        // Always mint the LOCAL approval first: the hook polls the local id and
+        // the dashboard renders/resolves it, regardless of which bot is used.
         const approval = ctx.approvalStore.create({
           sessionId,
           project,
@@ -94,11 +106,32 @@ export function registerApprovalsRoutes(
           detail: gate.detail,
         });
 
-        // Fire-and-forget the Telegram push. A failure here must NOT prevent
-        // us returning the requestId — the dashboard can still resolve it.
-        void ctx.telegram.sendApproval(approval).catch(() => {
-          /* swallowed inside sendApproval too; double-guard */
-        });
+        if (sharedLinked) {
+          // Push to the Founder cloud bot, then poll its decision back into the
+          // LOCAL store so the hook (polling the local id) and dashboard both
+          // resolve. A relay failure must NOT prevent returning the local
+          // requestId — the dashboard can still resolve it.
+          void ctx.sharedBot
+            .approve({
+              tool: toolName ?? "tool",
+              summary: gate.summary,
+              detail: gate.detail,
+            })
+            .then((result) => {
+              if (result.gated && result.requestId) {
+                ctx.sharedApprovalPoller.track(approval.id, result.requestId);
+              }
+            })
+            .catch(() => {
+              /* swallowed inside approve() too; double-guard */
+            });
+        } else {
+          // "own" mode: fire-and-forget the LOCAL grammY push. A failure here
+          // must NOT prevent returning the requestId.
+          void ctx.telegram.sendApproval(approval).catch(() => {
+            /* swallowed inside sendApproval too; double-guard */
+          });
+        }
 
         return reply.send({ gated: true, requestId: approval.id });
       } catch (err) {

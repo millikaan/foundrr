@@ -59,11 +59,32 @@ CREATE TABLE IF NOT EXISTS settings (
   telemetry_share INTEGER DEFAULT 1,
   model TEXT DEFAULT 'claude-code',
   last_tokens INTEGER DEFAULT 0,
-  last_cost REAL DEFAULT 0
+  last_cost REAL DEFAULT 0,
+  telegram_mode TEXT DEFAULT 'shared'
 );
 `;
+
+/**
+ * Additive column migrations for the `settings` singleton. SQLite has no
+ * "ADD COLUMN IF NOT EXISTS", so we probe the column list and add what's
+ * missing. Each is wrapped so a pre-existing column (older db where SCHEMA
+ * already created it) is a harmless no-op rather than a thrown error.
+ */
+function migrateSettingsColumns(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(settings)").all() as { name: string }[]).map(
+      (c) => c.name,
+    ),
+  );
+  if (!cols.has("telegram_mode")) {
+    db.exec(
+      "ALTER TABLE settings ADD COLUMN telegram_mode TEXT DEFAULT 'shared'",
+    );
+  }
+}
 
 /** Run all CREATE TABLE IF NOT EXISTS statements. Idempotent. */
 export function runMigrations(db: Database.Database): void {
   db.exec(SCHEMA);
+  migrateSettingsColumns(db);
 }

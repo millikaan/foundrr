@@ -11,7 +11,9 @@ import type { EventHub } from "../events/event-hub.js";
 import type { PreviewProxyService } from "../preview/proxy-service.js";
 import type { PtyManager } from "../pty/manager.js";
 import type { ServerMonitor } from "../servers/monitor.js";
+import type { SharedApprovalPoller } from "../approvals/shared-poller.js";
 import type { TelegramService } from "../telegram/bot.js";
+import type { SharedBot } from "../telegram/shared-bot.js";
 import type { StreamRegistry } from "../ws/registry.js";
 
 export interface AppContext {
@@ -25,6 +27,11 @@ export interface AppContext {
   readonly ptyManager: PtyManager;
   readonly costStore: CostStore;
   readonly approvalStore: ApprovalStore;
+  /** Local grammY bot (M6/M7 "own" mode). */
   readonly telegram: TelegramService;
+  /** Founder shared cloud bot client (P7 "shared" mode). */
+  readonly sharedBot: SharedBot;
+  /** Bridges shared-bot decisions back into the local approval store. */
+  readonly sharedApprovalPoller: SharedApprovalPoller;
   readonly tunnelManager: TunnelManager;
 }

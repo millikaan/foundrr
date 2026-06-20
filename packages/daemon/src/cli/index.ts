@@ -21,8 +21,10 @@ Usage:
   mc telemetry enable   Print the OTel env block to feed Claude Code cost/token metrics
   mc telemetry share on|off|status  Anonymous global usage sharing (ON by default; easy opt-out)
   mc config model <key>|show  Set/show the agent/model you run (used for the global leaderboard)
-  mc telegram setup <t> Store a Telegram bot token (the leash: notify + approve)
-  mc telegram status    Show whether a bot token is stored and a chat is linked
+  mc telegram link      Get a code to link this install to the Founder shared bot
+  mc telegram status    Show the Telegram mode, install id, and linked state
+  mc telegram mode <m>  Set the leash mode: shared (default) | own | off
+  mc telegram setup <t> Store a Telegram bot token for "own" mode (your own bot)
   mc tunnel [--yes]     Expose the dashboard at a public HTTPS URL (Cloudflare; see warning)
   mc rotate-token       Regenerate the access token (revokes the old one) + print the URL
   mc doctor             Run an environment preflight checklist
@@ -63,7 +65,7 @@ async function main(): Promise<void> {
       runConfig(sub, process.argv[4]);
       return;
     case "telegram":
-      runTelegramCli(sub, process.argv[4]);
+      await runTelegramCli(sub, process.argv[4]);
       return;
     case "tunnel":
       await runTunnel();

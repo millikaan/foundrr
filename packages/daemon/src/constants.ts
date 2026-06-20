@@ -152,3 +152,36 @@ export const APPROVAL_SWEEP_INTERVAL_MS = 2_000;
  * dashboard snapshot). Pending ones are always included.
  */
 export const APPROVAL_RECENT_RESOLVED_CAP = 10;
+
+// ─── Shared Founder Telegram bot (P7) ────────────────────────────────────────
+
+/**
+ * Path of the shared-bot cloud relay edge function, appended to the share base
+ * URL (the SAME base/key as the telemetry reporter — TELEMETRY_DEFAULT_URL /
+ * TELEMETRY_DEFAULT_KEY). The full endpoint is `${base}/functions/v1/tg-api`.
+ */
+export const SHARED_BOT_API_PATH = "/functions/v1/tg-api";
+
+/**
+ * Hard timeout on any shared-bot relay call. The relay must NEVER block the
+ * daemon, so every fetch is aborted after this and treated as a soft failure.
+ */
+export const SHARED_BOT_REQUEST_TIMEOUT_MS = 5_000;
+
+/**
+ * How long an `isLinked()` result is cached before re-querying the relay. Keeps
+ * the hot approval path (which checks linked-ness on every gated call) from
+ * hammering the network while staying fresh enough to notice a new /link.
+ */
+export const SHARED_BOT_LINK_CACHE_MS = 30_000;
+
+/** How often the shared-approval poller asks the relay for a decision. */
+export const SHARED_BOT_POLL_INTERVAL_MS = 2_000;
+
+/**
+ * Total time the shared-approval poller runs before giving up. Kept just under
+ * the local APPROVAL_TTL_MS so the local request expires (deferring to the
+ * prompt) right after the poller stops — a late tap can never resolve a dead
+ * request.
+ */
+export const SHARED_BOT_POLL_BUDGET_MS = 48_000;
