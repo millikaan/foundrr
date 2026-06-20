@@ -15,6 +15,9 @@ export function FinalCta() {
       <MeshWhisper />
       <div className="relative mx-auto max-w-3xl px-5 py-24 text-center sm:py-32">
         <Reveal className="flex flex-col items-center">
+          <p className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.22em] text-ink-faint">
+            Get started
+          </p>
           <h2 className="max-w-2xl font-display text-3xl font-light leading-[1.12] tracking-[-0.02em] text-ink sm:text-5xl">
             Keep your agents running while you live your life.
           </h2>

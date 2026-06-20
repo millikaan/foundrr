@@ -37,6 +37,9 @@ export function ClaimSection() {
       <MeshWhisper />
       <div className="relative mx-auto max-w-4xl px-5 py-24 sm:py-32">
         <Reveal className="flex flex-col items-center text-center">
+          <p className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.22em] text-ink-faint">
+            Why Foundrr
+          </p>
           <h2 className="max-w-2xl font-display text-3xl font-light leading-[1.15] tracking-[-0.02em] text-ink sm:text-[2.9rem] sm:leading-[1.1]">
             Everything your machine is doing. On one screen.
           </h2>

@@ -15,6 +15,7 @@ import { registerAccessRoutes } from "./routes/access.js";
 import { registerAgentsRoute } from "./routes/agents.js";
 import { registerApprovalsRoutes } from "./routes/approvals.js";
 import { registerConfigRoutes } from "./routes/config.js";
+import { registerCostRoutes } from "./routes/cost.js";
 import { registerEventsRoute } from "./routes/events.js";
 import { registerGitRoute } from "./routes/git.js";
 import { registerHealthRoute } from "./routes/health.js";
@@ -49,6 +50,8 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   // Remote approve (M7): hook-facing /approvals/* + dashboard /api/approvals.
   // Token-protected; declared paths so they win over the SPA/static fallback.
   registerApprovalsRoutes(app, ctx);
+  // Cost history CSV export (token-protected).
+  registerCostRoutes(app, ctx);
   // Telegram link status — dashboard away-surface indicator (token-protected).
   registerTelegramRoute(app, ctx);
   // "Access from anywhere" panel — addresses + managed tunnel (token-protected).

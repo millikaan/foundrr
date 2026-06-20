@@ -251,6 +251,37 @@ export function decideApproval(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cost — export the persisted daily spend ledger.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Download the persisted daily cost ledger as a CSV. Fetches with the token
+ * header, then triggers a browser download via a temporary object URL. Throws
+ * {@link ApiError} on a missing token or non-2xx so the caller can surface it.
+ */
+export async function exportCostCsv(): Promise<void> {
+  const token = getToken();
+  if (!token) {
+    throw new ApiError("Missing access token", 401);
+  }
+  const res = await fetch("/api/cost/export.csv", {
+    headers: { [TOKEN_HEADER]: token },
+  });
+  if (!res.ok) {
+    throw new ApiError(`GET /api/cost/export.csv → ${res.status}`, res.status);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "foundrr-cost.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Access (away-surface) — reach the dashboard from your phone.
 // ─────────────────────────────────────────────────────────────────────────────
 

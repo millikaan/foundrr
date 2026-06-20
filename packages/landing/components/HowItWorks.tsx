@@ -48,7 +48,9 @@ export function HowItWorks() {
               <span className="font-mono text-sm text-ink-faint transition-colors duration-300 group-hover:text-ink">
                 {step.n}
               </span>
-              <h3 className="text-lg font-medium text-ink">{step.title}</h3>
+              <h3 className="font-display text-lg font-normal tracking-[-0.01em] text-ink">
+                {step.title}
+              </h3>
               <span aria-hidden />
               <p className="max-w-xl text-[0.95rem] leading-relaxed text-ink-muted">
                 {step.body}

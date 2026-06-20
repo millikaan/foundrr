@@ -270,7 +270,10 @@ function TelegramSection() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Poll status until linked, then stop — once approvals reach the phone there's
+  // nothing left to watch for, so we don't spin a 3s timer forever.
   useEffect(() => {
+    if (status?.linked) return;
     let cancelled = false;
     const tick = async (): Promise<void> => {
       const s = await getTelegramStatus();
@@ -282,7 +285,7 @@ function TelegramSection() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [status?.linked]);
 
   const linked = status?.linked === true;
   const command = link?.linkCode ? `/link ${link.linkCode}` : "";

@@ -112,6 +112,14 @@ export interface ApprovalRequest {
 // Cost (M5)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** One persisted day of spend — a point on the cost-trend sparkline. */
+export interface CostDay {
+  /** Local day label, e.g. "Sat Jun 20 2026" (Date.toDateString()). */
+  day: string;
+  usd: number;
+  tokens: number;
+}
+
 export interface CostSnapshot {
   /** Total USD across all sessions today (local day). */
   todayUsd: number;
@@ -121,6 +129,8 @@ export interface CostSnapshot {
   lifetimeUsd: number;
   /** All-time tokens, persisted to SQLite (survives daemon restarts). */
   lifetimeTokens: number;
+  /** Last 7 local days (oldest→newest), zero-filled — powers the trend sparkline. */
+  history: CostDay[];
   /** Per-session breakdown, keyed by session.id. */
   sessions: Record<string, { usd: number; tokens: number }>;
   updatedAt: number;

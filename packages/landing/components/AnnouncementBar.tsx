@@ -15,7 +15,7 @@ export function AnnouncementBar() {
           supervise your AI coding agents from your phone.{" "}
           <Link
             href="/setup"
-            className="text-signal-ink underline-offset-4 transition-colors hover:underline"
+            className="font-medium text-ink underline-offset-4 transition-colors hover:underline"
           >
             Get started →
           </Link>

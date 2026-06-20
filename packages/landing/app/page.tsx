@@ -6,6 +6,7 @@ import { Features } from "@/components/Features";
 import { ProductSection } from "@/components/ProductSection";
 import { TelemetrySection } from "@/components/TelemetrySection";
 import { HowItWorks } from "@/components/HowItWorks";
+import { Faq } from "@/components/Faq";
 import { FinalCta } from "@/components/FinalCta";
 import { Footer } from "@/components/Footer";
 import { fetchGlobalTotals, fetchLeaderboard } from "@/lib/supabase";
@@ -34,6 +35,7 @@ export default async function Page() {
         <ProductSection />
         <TelemetrySection initial={initial} />
         <HowItWorks />
+        <Faq />
         <FinalCta />
       </main>
       <Footer />

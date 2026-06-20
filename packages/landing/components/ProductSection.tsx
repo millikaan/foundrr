@@ -70,7 +70,7 @@ export function ProductSection() {
                 <span className="h-2.5 w-2.5 rounded-full bg-[color-mix(in_srgb,var(--ink-faint)_55%,transparent)]" />
               </span>
               <span className="ml-2 font-mono text-[0.7rem] text-ink-faint">
-                founder · localhost
+                foundrr · localhost
               </span>
               <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[0.66rem] text-ink-muted">
                 <span className="relative inline-flex h-1.5 w-1.5">

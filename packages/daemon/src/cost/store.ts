@@ -142,9 +142,34 @@ export class CostStore {
       todayTokens: this.todayTokens,
       lifetimeUsd: lifetime.usd,
       lifetimeTokens: lifetime.tokens,
+      history: this.history(now),
       sessions,
       updatedAt: this.updatedAt,
     };
+  }
+
+  /**
+   * Last 7 local days (oldest→newest), zero-filled, for the trend sparkline.
+   * `cost_daily.day` is a non-sortable Date.toDateString() label, so we rebuild
+   * the 7-day window in JS from `now` and look each day up by key.
+   */
+  private history(now: number): { day: string; usd: number; tokens: number }[] {
+    const DAY_MS = 86_400_000;
+    try {
+      const rows = this.db
+        .prepare("SELECT day, usd, tokens FROM cost_daily")
+        .all() as Array<{ day: string; usd: number; tokens: number }>;
+      const byDay = new Map(rows.map((r) => [r.day, r]));
+      const out: { day: string; usd: number; tokens: number }[] = [];
+      for (let i = 6; i >= 0; i -= 1) {
+        const day = new Date(now - i * DAY_MS).toDateString();
+        const row = byDay.get(day);
+        out.push({ day, usd: row?.usd ?? 0, tokens: row?.tokens ?? 0 });
+      }
+      return out;
+    } catch {
+      return [];
+    }
   }
 
   /**

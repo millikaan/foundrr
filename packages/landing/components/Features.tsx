@@ -78,7 +78,12 @@ export function Features() {
     >
       <MeshWhisper />
       <div className="relative mx-auto max-w-5xl px-5 py-20 sm:py-28">
-        <div className="grid gap-x-10 gap-y-12 sm:grid-cols-3">
+        <Reveal>
+          <p className="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-ink-faint">
+            The console
+          </p>
+        </Reveal>
+        <div className="mt-12 grid gap-x-10 gap-y-12 sm:grid-cols-3">
           {FEATURES.map((feature, i) => (
             <Reveal
               key={feature.label}
@@ -88,7 +93,9 @@ export function Features() {
               <span className="text-ink transition-transform duration-300 motion-safe:group-hover:-translate-y-0.5">
                 {feature.icon}
               </span>
-              <h3 className="mt-5 text-base font-semibold text-ink">
+              {/* Light-weight heading — Aqua's signature is the thin type, never
+                  bold. Size carries the hierarchy; weight stays light. */}
+              <h3 className="mt-5 font-display text-[1.0625rem] font-normal tracking-[-0.01em] text-ink">
                 {feature.label}
               </h3>
               <p className="mt-2 max-w-xs text-[0.9rem] leading-relaxed text-ink-muted">
