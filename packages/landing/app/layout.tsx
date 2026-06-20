@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { JetBrains_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -8,10 +8,13 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const spaceGrotesk = Space_Grotesk({
+// Humanist grotesk. We lean on the light weights (300–400) for the
+// oversized thin headlines that carry the whole design.
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-space-grotesk",
+  variable: "--font-inter",
   display: "swap",
+  weight: ["300", "400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -46,7 +49,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d1014",
+  themeColor: "#f6f7f9",
   width: "device-width",
   initialScale: 1,
 };
@@ -59,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
+      className={`${jetbrainsMono.variable} ${inter.variable}`}
     >
       <body>{children}</body>
     </html>

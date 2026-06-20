@@ -185,7 +185,7 @@ function CheckIcon() {
 
 export default function SetupPage() {
   return (
-    <main>
+    <main className="min-h-screen bg-void text-text">
       {/* ── Top nav: minimal, back to home ─────────────────────────────── */}
       <div className="sticky top-0 z-50 border-b border-line/80 bg-[color-mix(in_srgb,var(--void)_72%,transparent)] backdrop-blur-md supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--void)_55%,transparent)]">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5 lg:px-8">

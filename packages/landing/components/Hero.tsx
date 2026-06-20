@@ -1,40 +1,16 @@
-import Link from "next/link";
+"use client";
 
-import { GITHUB_URL } from "@/lib/config";
-import { logoForKey } from "@/components/BrandLogos";
-
-/** Agents shown in the hero "works with" strip — keys map to brand marks. */
-const HERO_AGENTS: ReadonlyArray<{ key: string; name: string }> = [
-  { key: "claude-code", name: "Claude Code" },
-  { key: "openai-codex", name: "OpenAI Codex" },
-  { key: "gemini-cli", name: "Gemini CLI" },
-  { key: "aider", name: "Aider" },
-  { key: "amazon-q", name: "Amazon Q" },
-];
-
-function GitHubMark() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden
-    >
-      <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.96 0-1.32.47-2.39 1.24-3.23-.13-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.23 0 4.63-2.81 5.65-5.49 5.95.43.37.81 1.1.81 2.22v3.29c0 .32.21.69.82.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
-    </svg>
-  );
-}
+import { motion, useReducedMotion } from "framer-motion";
 
 function ArrowRight() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -45,127 +21,86 @@ function ArrowRight() {
   );
 }
 
+/**
+ * Hero — light off-white canvas. Headline-first: an oversized, thin two-line
+ * headline carries the section. A short muted subline + one quiet secondary
+ * link. Ambient blob field sits behind at extremely low contrast. A quiet
+ * scroll cue hints at what's below. No amber here — the headline is the look.
+ */
 export function Hero() {
+  const reduce = useReducedMotion();
+
+  const lineUp = (delay: number) => ({
+    initial: { opacity: 0, y: reduce ? 0 : 16 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as const, delay },
+  });
+
   return (
-    <header id="top" className="relative overflow-hidden">
-      {/* Animated background layers */}
-      <div className="absolute inset-0 console-grid pointer-events-none" aria-hidden />
-      <div
-        className="absolute inset-0 console-grid-fine pointer-events-none"
-        aria-hidden
-      />
-      <div className="absolute inset-0 hero-glow pointer-events-none" aria-hidden />
-      <div className="signal-sweep" aria-hidden />
-      {/* Top edge sweep line */}
-      <div
-        className="absolute top-0 left-0 right-0 h-px overflow-hidden"
-        aria-hidden
-      >
-        <div className="sweep h-px w-1/4" />
+    <section
+      id="top"
+      className="relative overflow-hidden bg-canvas"
+    >
+      {/* Ambient blob field — the only texture, extremely low contrast. */}
+      <div className="blob-field" aria-hidden>
+        <span className="blob blob-a" />
+        <span className="blob blob-b" />
+        <span className="blob blob-c" />
       </div>
 
-      <div className="relative mx-auto max-w-4xl px-5 pt-24 pb-16 sm:pt-32 sm:pb-24 text-center">
-        <div className="rise inline-flex items-center gap-2 rounded-full border border-line bg-[color-mix(in_srgb,var(--panel)_75%,transparent)] px-3.5 py-1.5 backdrop-blur-sm">
-          <span className="relative inline-flex h-1.5 w-1.5">
-            <span className="pulse-dot absolute inset-0" />
-            <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-signal" />
-          </span>
-          <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted">
-            open-source dev supervision
-          </span>
-        </div>
-
-        <h1
-          className="rise mt-8 font-display text-6xl sm:text-8xl font-bold tracking-[-0.03em] leading-[0.95]"
-          style={{ animationDelay: "60ms" }}
+      <div className="relative mx-auto max-w-4xl px-5 pt-28 pb-24 sm:pt-36 sm:pb-32 text-center">
+        <motion.p
+          {...lineUp(0)}
+          className="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-ink-faint"
         >
-          <span className="bg-gradient-to-b from-text to-[color-mix(in_srgb,var(--text)_55%,var(--void))] bg-clip-text text-transparent">
-            Founder
-          </span>
+          Open-source dev supervision
+        </motion.p>
+
+        <h1 className="mt-7 font-display text-[2.6rem] leading-[1.05] tracking-[-0.02em] text-ink sm:text-[4.5rem] sm:leading-[1.02]">
+          <motion.span {...lineUp(0.06)} className="block font-light">
+            You left the desk.
+          </motion.span>
+          <motion.span {...lineUp(0.14)} className="block font-light">
+            Your agents kept working.
+          </motion.span>
         </h1>
 
-        <p
-          className="rise mx-auto mt-7 max-w-2xl text-xl sm:text-3xl font-medium text-text leading-snug tracking-[-0.01em] text-balance"
-          style={{ animationDelay: "120ms" }}
+        <motion.p
+          {...lineUp(0.24)}
+          className="mx-auto mt-8 max-w-xl text-base leading-relaxed text-ink-muted sm:text-lg"
         >
-          Supervise your AI coding agents from anywhere — and watch the
-          world&apos;s{" "}
-          <span className="text-signal signal-glow-soft">
-            token spend in real time.
-          </span>
-        </p>
+          Founder is a local command center for your terminal agents. Watch every
+          session live, and approve what they ask — from anywhere.
+        </motion.p>
 
-        <p
-          className="rise mx-auto mt-5 max-w-xl text-base sm:text-lg text-muted leading-relaxed text-balance"
-          style={{ animationDelay: "150ms" }}
-        >
-          A local command center for your terminal agents. Approve prompts from
-          your phone, track every token, and keep your code on your machine.
-        </p>
-
-        <div
-          className="rise mt-10 flex flex-col sm:flex-row items-center justify-center gap-3"
-          style={{ animationDelay: "180ms" }}
-        >
+        <motion.div {...lineUp(0.32)} className="mt-9">
           <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-signal px-7 py-3.5 font-semibold text-[#0d1014] transition-transform hover:-translate-y-0.5 box-glow-signal"
+            href="#how-it-works"
+            className="group inline-flex items-center gap-2 text-sm font-medium text-ink underline-offset-4 hover:underline"
           >
-            <GitHubMark />
-            Get it on GitHub
-          </a>
-          <Link
-            href="/setup"
-            className="group inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-line bg-[color-mix(in_srgb,var(--panel)_70%,transparent)] px-7 py-3.5 font-medium text-text backdrop-blur-sm transition-colors hover:border-[var(--cool)] hover:text-cool"
-          >
-            How it works
+            See how it works
             <ArrowRight />
-          </Link>
-        </div>
+          </a>
+        </motion.div>
 
-        {/* Install command terminal chip */}
-        <div
-          className="rise mx-auto mt-10 inline-flex max-w-full items-center gap-3 rounded-lg border border-line bg-[color-mix(in_srgb,var(--void-2)_85%,transparent)] px-4 py-2.5 backdrop-blur-sm"
-          style={{ animationDelay: "240ms" }}
-        >
-          <span className="flex items-center gap-1.5" aria-hidden>
-            <span className="h-2 w-2 rounded-full bg-alert/70" />
-            <span className="h-2 w-2 rounded-full bg-signal/70" />
-            <span className="h-2 w-2 rounded-full bg-ok/70" />
+        {/* Quiet scroll cue. */}
+        <div className="mt-24 flex justify-center" aria-hidden>
+          <span className="scroll-cue text-ink-faint">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
           </span>
-          <code className="font-mono text-xs sm:text-sm text-muted truncate">
-            <span className="text-faint select-none">$ </span>
-            <span className="text-text">npx</span> founder init
-            <span className="caret" aria-hidden />
-          </code>
-        </div>
-
-        {/* Works-with strip — real brand marks, reinforcing the agent lineup. */}
-        <div
-          className="rise mt-12"
-          style={{ animationDelay: "300ms" }}
-        >
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.22em] text-faint">
-            Works with your terminal agents
-          </p>
-          <ul className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-            {HERO_AGENTS.map(({ key, name }) => {
-              const Logo = logoForKey(key);
-              return (
-                <li
-                  key={key}
-                  className="inline-flex items-center gap-2 rounded-full border border-line bg-[color-mix(in_srgb,var(--panel)_55%,transparent)] px-3 py-1.5 text-muted backdrop-blur-sm transition-colors hover:border-[var(--faint)] hover:text-text"
-                >
-                  <Logo size={16} className="text-muted" />
-                  <span className="text-xs font-medium">{name}</span>
-                </li>
-              );
-            })}
-          </ul>
         </div>
       </div>
-    </header>
+    </section>
   );
 }

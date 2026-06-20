@@ -1,9 +1,12 @@
+import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { Nav } from "@/components/Nav";
 import { Hero } from "@/components/Hero";
-import { Counters } from "@/components/Counters";
-import { Leaderboard } from "@/components/Leaderboard";
-import { ModelsGrid } from "@/components/ModelsGrid";
-import { Telemetry } from "@/components/Telemetry";
+import { ClaimSection } from "@/components/ClaimSection";
+import { Features } from "@/components/Features";
+import { ProductSection } from "@/components/ProductSection";
+import { TelemetrySection } from "@/components/TelemetrySection";
+import { HowItWorks } from "@/components/HowItWorks";
+import { FinalCta } from "@/components/FinalCta";
 import { Footer } from "@/components/Footer";
 import { fetchGlobalTotals, fetchLeaderboard } from "@/lib/supabase";
 import { SERVER_REVALIDATE_SECONDS } from "@/lib/config";
@@ -21,14 +24,19 @@ export default async function Page() {
   const initial: LiveData = { totals, leaderboard };
 
   return (
-    <main>
+    <>
+      <AnnouncementBar />
       <Nav />
-      <Hero />
-      <Counters initial={initial} />
-      <Leaderboard initial={initial} />
-      <ModelsGrid />
-      <Telemetry />
+      <main>
+        <Hero />
+        <ClaimSection />
+        <Features />
+        <ProductSection />
+        <TelemetrySection initial={initial} />
+        <HowItWorks />
+        <FinalCta />
+      </main>
       <Footer />
-    </main>
+    </>
   );
 }
