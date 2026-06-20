@@ -166,7 +166,12 @@ export function registerServersRoute(
         if (port === null) {
           return badRequest(reply, "port must be a positive integer");
         }
-        const { proxyPort } = await ctx.previewProxy.expose(port);
+        // Pass the server's actual bind address so the proxy connects to the
+        // right family (e.g. Vite on IPv6 ::1, not 127.0.0.1).
+        const detected = (
+          ctx.serverMonitor.ready ? ctx.serverMonitor.getLatest() : []
+        ).find((s) => s.port === port);
+        const { proxyPort } = await ctx.previewProxy.expose(port, detected?.address);
         return { proxyPort };
       } catch (err) {
         return serverError(reply, err);

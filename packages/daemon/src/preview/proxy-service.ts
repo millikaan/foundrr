@@ -41,9 +41,21 @@ export interface PreviewProxyEntry {
  * ProxyInstance — `ReturnType<typeof httpProxy.createProxyServer>` would instead
  * resolve the generic TError to `unknown` and mismatch the call site.
  */
-function buildProxy(targetPort: number) {
+/**
+ * Format a detected bind address into a connectable upstream host. Dev servers
+ * often bind IPv6 `::1` (Vite/Next) — connecting to `127.0.0.1` then fails with
+ * ECONNREFUSED. Use the family the server actually listens on.
+ */
+function formatUpstreamHost(address: string | undefined): string {
+  const a = (address ?? "").trim();
+  if (!a || a === "0.0.0.0") return "127.0.0.1"; // any-IPv4 → loopback
+  if (a === "::" || a === "::1" || a === "[::]") return "[::1]"; // any/loopback IPv6
+  return a.includes(":") ? `[${a}]` : a; // bracket IPv6 literals; pass through IPv4/hostnames
+}
+
+function buildProxy(targetPort: number, targetHost: string) {
   return httpProxy.createProxyServer({
-    target: `http://127.0.0.1:${targetPort}`,
+    target: `http://${targetHost}:${targetPort}`,
     ws: true,
     // Rewrite Host → target so Vite/webpack host-checks pass through the proxy.
     changeOrigin: true,
@@ -110,13 +122,13 @@ export class PreviewProxyService {
    * proxy port. Idempotent: if `targetPort` is already exposed, the existing
    * proxy is reused and its port returned (no second listener).
    */
-  async expose(targetPort: number): Promise<{ proxyPort: number }> {
+  async expose(targetPort: number, address?: string): Promise<{ proxyPort: number }> {
     const existing = this.byTarget.get(targetPort);
     if (existing) {
       return { proxyPort: existing.proxyPort };
     }
 
-    const proxy = buildProxy(targetPort);
+    const proxy = buildProxy(targetPort, formatUpstreamHost(address));
 
     // A target error (dev server down/reset) must answer the client, not crash.
     // The 3rd arg is the ServerResponse for web requests, or the socket for ws.
