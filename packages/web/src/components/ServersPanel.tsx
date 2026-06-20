@@ -36,7 +36,7 @@ import {
   stopRegistered,
   unexposeServer,
 } from "../lib/api";
-import { checkPreviewReachable, previewUnreachableMessage, previewUrl } from "../lib/preview";
+import { previewUrl } from "../lib/preview";
 
 interface ServersPanelProps {
   /** Live detected servers from the WS stream (useStream().servers). */
@@ -132,16 +132,14 @@ export function ServersPanel({ servers }: ServersPanelProps) {
       });
 
       // Pre-open a blank tab for Preview *synchronously* inside the click so
-      // mobile popup blockers don't suppress it after the await. Navigated once
-      // the proxy port is known; closed if the expose call fails OR if the
-      // current context can't reach the http preview (HTTPS/remote) — in that
-      // case we never want a tab stranded on about:blank.
+      // mobile popup blockers don't suppress it after the await, then navigate it
+      // once the proxy is mounted. The preview is same-origin (no separate port,
+      // no mixed content), so it opens in every context the dashboard does.
       // NOTE: no "noopener" here — that makes window.open() return null, leaving
       // the blank tab stranded on about:blank (we'd have no handle to navigate).
-      // The target is the user's own LAN dev server, so opener access is fine.
-      const reachability = action === "expose" ? checkPreviewReachable() : { reachable: true };
-      const previewWindow =
-        action === "expose" && reachability.reachable ? window.open("", "_blank") : null;
+      // The target is the user's own dev server on the same origin, so opener
+      // access is fine.
+      const previewWindow = action === "expose" ? window.open("", "_blank") : null;
 
       try {
         const regId = entry.registered?.id;
@@ -164,23 +162,11 @@ export function ServersPanel({ servers }: ServersPanelProps) {
             break;
           case "expose":
             if (port !== undefined) {
-              const { proxyPort } = await exposeServer(port);
-              if (!reachability.reachable) {
-                // HTTPS/remote: opening an http preview here would strand a blank
-                // tab (or be mixed-content-blocked). Keep the proxy exposed so the
-                // user can try the http URL on the LAN, but be honest about it.
-                previewWindow?.close();
-                if (mountedRef.current) {
-                  setErrors((prev) => ({
-                    ...prev,
-                    [entry.key]: previewUnreachableMessage(proxyPort),
-                  }));
-                }
-              } else {
-                const url = previewUrl(proxyPort);
-                if (previewWindow) previewWindow.location.replace(url);
-                else window.open(url, "_blank", "noopener,noreferrer");
-              }
+              await exposeServer(port);
+              // Same-origin path URL — opens over LAN http AND https tunnel.
+              const url = previewUrl(port);
+              if (previewWindow) previewWindow.location.replace(url);
+              else window.open(url, "_blank", "noopener,noreferrer");
             }
             break;
           case "unexpose":
@@ -188,7 +174,7 @@ export function ServersPanel({ servers }: ServersPanelProps) {
             break;
         }
         // Reflect reality immediately: rescan + refetch the registered list. The
-        // rescan re-emits the servers WS frame so exposedProxyPort updates.
+        // rescan re-emits the servers WS frame so each row's `exposed` flag updates.
         await scanServers().catch(() => undefined);
         await refetchRegistered();
       } catch (err: unknown) {

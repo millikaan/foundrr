@@ -102,7 +102,7 @@ async function handleConnection(
 
   socket.on("message", (data: Buffer, isBinary: boolean) => {
     try {
-      handleMessage(manager, id, data, isBinary);
+      handleMessage(manager, id, data, isBinary, socket);
     } catch {
       // Malformed frame — ignore, never crash.
     }
@@ -115,18 +115,22 @@ async function handleConnection(
 /**
  * Route an inbound frame: binary frames beginning with 0x00 are control frames;
  * everything else is keystroke text written to the pty.
+ *
+ * `socket` is the sender — passed to resize so the manager can enforce that only
+ * the PTY's owner client may change its shared dimensions (multi-device safety).
  */
 function handleMessage(
   manager: AppContext["ptyManager"],
   id: string,
   data: Buffer,
   isBinary: boolean,
+  socket: WebSocket,
 ): void {
   if (isBinary && data.length > 0 && data[0] === TERM_CONTROL_PREFIX) {
     const json = data.subarray(1).toString("utf8");
     const frame = JSON.parse(json) as { t?: string; cols?: number; rows?: number };
     if (frame.t === "resize") {
-      manager.resize(id, Number(frame.cols), Number(frame.rows));
+      manager.resize(id, Number(frame.cols), Number(frame.rows), socket);
     } else if (frame.t === "kill") {
       manager.kill(id);
     }

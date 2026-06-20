@@ -58,6 +58,15 @@ interface PtyEntry {
   readonly proc: PtyProcess;
   readonly info: TerminalTabInfo;
   readonly sockets: Set<TermSocket>;
+  /**
+   * The socket that owns the PTY's dimensions. The FIRST client to attach
+   * becomes the owner; only the owner may resize the shared PTY. This stops a
+   * second device (or a reloading tab) from resizing the PTY to its own
+   * viewport — a resize fires SIGWINCH, which makes a full-screen TUI (e.g.
+   * Claude Code) already running for the first device repaint and garble.
+   * When the owner detaches, ownership passes to any one remaining socket.
+   */
+  ownerSocket: TermSocket | null;
   /** Ring buffer of recent raw output bytes, capped at TERM_SCROLLBACK_MAX. */
   scrollback: Buffer;
   /** Epoch ms of the last input or output activity. Drives quick-reply target. */
@@ -183,6 +192,7 @@ export class PtyManager {
       proc,
       info,
       sockets: new Set<TermSocket>(),
+      ownerSocket: null,
       scrollback: Buffer.alloc(0),
       lastActivityAt: Date.now(),
     };
@@ -206,14 +216,47 @@ export class PtyManager {
     return info;
   }
 
-  /** Attach a socket to an existing pty so it receives live output. */
+  /**
+   * Attach a socket to an existing pty so it receives live output. The first
+   * socket to attach becomes the size owner (see PtyEntry.ownerSocket); later
+   * joiners share the owner's geometry and cannot resize the shared PTY.
+   */
   attach(id: string, socket: TermSocket): void {
-    this.entries.get(id)?.sockets.add(socket);
+    const entry = this.entries.get(id);
+    if (!entry) {
+      return;
+    }
+    entry.sockets.add(socket);
+    if (entry.ownerSocket === null) {
+      entry.ownerSocket = socket;
+    }
   }
 
-  /** Detach a socket (e.g. on close). Does NOT kill the pty. */
+  /**
+   * Detach a socket (e.g. on close). Does NOT kill the pty. If the detaching
+   * socket owned the PTY dimensions, ownership passes to any one remaining
+   * socket so a later client can still resize the now-solo session.
+   */
   detach(id: string, socket: TermSocket): void {
-    this.entries.get(id)?.sockets.delete(socket);
+    const entry = this.entries.get(id);
+    if (!entry) {
+      return;
+    }
+    entry.sockets.delete(socket);
+    if (entry.ownerSocket === socket) {
+      entry.ownerSocket = entry.sockets.values().next().value ?? null;
+    }
+  }
+
+  /** Whether `socket` owns the dimensions of pty `id` (or is its only client). */
+  private isResizeAuthority(entry: PtyEntry, socket: TermSocket): boolean {
+    // The owner always may resize. As a safety net, a sole attached client may
+    // also resize even if ownership is somehow unset — a single client can
+    // never disrupt another.
+    if (entry.ownerSocket === socket) {
+      return true;
+    }
+    return entry.ownerSocket === null && entry.sockets.size <= 1;
   }
 
   /** Write keystrokes to a pty. No-op if it is gone. */
@@ -262,7 +305,16 @@ export class PtyManager {
   }
 
   /**
-   * Resize a pty. No-op if it is gone or the dimensions are invalid.
+   * Resize a pty on behalf of `socket`. No-op if it is gone, the dimensions are
+   * invalid, or `socket` does not own the PTY's geometry.
+   *
+   * Multi-client safety: a shared PTY has ONE size. Only the owner socket (the
+   * first client to attach) may change it. A second device — or the same tab
+   * after a reload — that attaches later shares the owner's geometry and its
+   * resize requests are dropped here. Applying them would fire SIGWINCH on the
+   * shared PTY and make a full-screen TUI (e.g. Claude Code) already running for
+   * the owner repaint and garble. The joining client instead fits its own xterm
+   * view locally to the session's current size.
    *
    * Defense in depth: a request below the sane minimum (cols<2 / rows<2) is the
    * fingerprint of a hidden or unlaid-out client container — FitAddon clamps
@@ -270,7 +322,7 @@ export class PtyManager {
    * it, so a stray tiny resize can never wedge the PTY at one column (which made
    * a full-screen TUI render one character per line).
    */
-  resize(id: string, cols: number, rows: number): void {
+  resize(id: string, cols: number, rows: number, socket: TermSocket): void {
     if (!Number.isInteger(cols) || !Number.isInteger(rows)) {
       return;
     }
@@ -279,6 +331,11 @@ export class PtyManager {
     }
     const entry = this.entries.get(id);
     if (!entry) {
+      return;
+    }
+    if (!this.isResizeAuthority(entry, socket)) {
+      // A non-owner client (second device / reloaded tab) must not resize the
+      // shared PTY — that is what repaints and garbles the owner's TUI.
       return;
     }
     try {

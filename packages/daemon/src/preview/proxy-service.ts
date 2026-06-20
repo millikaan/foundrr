@@ -1,38 +1,47 @@
 /**
- * PreviewProxyService — runs 0.0.0.0 reverse proxies so localhost-only dev
- * servers (Vite/Next/etc., which usually bind 127.0.0.1) can be previewed from
- * a phone over the LAN/Tailscale at http://<dashboard-host>:<proxyPort>/.
+ * PreviewProxyService — a PATH-MOUNTED reverse proxy that runs THROUGH the main
+ * daemon HTTP server (port 7878), not on a separate LAN-only port.
  *
- * Each exposed dev server gets its own http.createServer bound on 0.0.0.0:0
- * (OS-assigned port) wrapping an http-proxy-3 instance pointed at
- * http://127.0.0.1:<targetPort>. `changeOrigin` rewrites the outgoing Host
- * header to the target so dev-server host checks ("Blocked request. This host
- * is not allowed.") pass; `ws:true` proxies the HMR / live-reload upgrade so
- * hot reload keeps working through the proxy.
+ * Each exposed dev server is reachable at `/__preview/:port/…` on the SAME origin
+ * as the dashboard. Because it shares the dashboard's origin it works everywhere
+ * the dashboard does — plain http over the LAN AND an https Cloudflare tunnel —
+ * with no separate port to forward and no mixed-content blocking.
  *
- * SECURITY: an exposed proxy port is UNAUTHENTICATED raw access to the dev
- * server on the LAN — the same exposure as the dev server itself binding
- * 0.0.0.0. This is intentional for preview (a phone browser can't send the
- * dashboard token), and every proxy is torn down on daemon shutdown via
- * stopAll() so it never outlives the process.
+ * The daemon's routes (servers.ts → handleHttp / app.ts → handleUpgrade) call
+ * into this service; it owns the per-target http-proxy-3 instances and the
+ * HTML rewrite that makes root-absolute assets resolve under the prefix.
+ *
+ * AUTH: the proxy entry points are reached only after the daemon's token gate
+ * (the `/__preview/*` HTTP route is token-protected like the rest of the API,
+ * and the upgrade handler authenticates the token before proxying). So the
+ * preview is NOT an open relay — it requires the same token/cookie the dashboard
+ * already carries.
  *
  * This class NEVER throws and NEVER lets a proxy error crash the daemon: target
  * errors (dev server down, reset, etc.) are caught and answered with a 502.
  */
-import { type AddressInfo, type Socket } from "node:net";
-import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { type Socket } from "node:net";
+import { type IncomingMessage, type ServerResponse } from "node:http";
 
 import httpProxy from "http-proxy-3";
 
-import {
-  PREVIEW_PROXY_EPHEMERAL_PORT,
-  PREVIEW_PROXY_HOST,
-} from "../constants.js";
+import { previewPrefix, rewriteHtml } from "./html-rewrite.js";
 
-/** A public summary of one running preview proxy. */
+/** A public summary of one exposed preview target. */
 export interface PreviewProxyEntry {
   readonly targetPort: number;
-  readonly proxyPort: number;
+}
+
+/**
+ * Format a detected bind address into a connectable upstream host. Dev servers
+ * often bind IPv6 `::1` (Vite/Next) — connecting to `127.0.0.1` then fails with
+ * ECONNREFUSED. Use the family the server actually listens on.
+ */
+export function formatUpstreamHost(address: string | undefined): string {
+  const a = (address ?? "").trim();
+  if (!a || a === "0.0.0.0") return "127.0.0.1"; // any-IPv4 → loopback
+  if (a === "::" || a === "::1" || a === "[::]") return "[::1]"; // any/loopback IPv6
+  return a.includes(":") ? `[${a}]` : a; // bracket IPv6 literals; pass through IPv4/hostnames
 }
 
 /**
@@ -41,18 +50,6 @@ export interface PreviewProxyEntry {
  * ProxyInstance — `ReturnType<typeof httpProxy.createProxyServer>` would instead
  * resolve the generic TError to `unknown` and mismatch the call site.
  */
-/**
- * Format a detected bind address into a connectable upstream host. Dev servers
- * often bind IPv6 `::1` (Vite/Next) — connecting to `127.0.0.1` then fails with
- * ECONNREFUSED. Use the family the server actually listens on.
- */
-function formatUpstreamHost(address: string | undefined): string {
-  const a = (address ?? "").trim();
-  if (!a || a === "0.0.0.0") return "127.0.0.1"; // any-IPv4 → loopback
-  if (a === "::" || a === "::1" || a === "[::]") return "[::1]"; // any/loopback IPv6
-  return a.includes(":") ? `[${a}]` : a; // bracket IPv6 literals; pass through IPv4/hostnames
-}
-
 function buildProxy(targetPort: number, targetHost: string) {
   return httpProxy.createProxyServer({
     target: `http://${targetHost}:${targetPort}`,
@@ -61,21 +58,23 @@ function buildProxy(targetPort: number, targetHost: string) {
     changeOrigin: true,
     // Forward client address (X-Forwarded-For / -Proto / -Host / -Port).
     xfwd: true,
+    // We rewrite proxied HTML ourselves (inject <base>, fix root-absolute URLs),
+    // so the proxy must hand us the response instead of streaming it through.
+    selfHandleResponse: true,
   });
 }
 
 /** The proxy instance type, matching exactly what buildProxy() returns. */
 type ProxyInstance = ReturnType<typeof buildProxy>;
 
-/** Internal record: the live server + proxy backing one exposed target. */
+/** Internal record: the proxy backing one exposed target. */
 interface ProxyRecord {
   readonly targetPort: number;
-  readonly proxyPort: number;
-  readonly server: Server;
   readonly proxy: ProxyInstance;
 }
 
 const HTTP_BAD_GATEWAY = 502;
+const HTTP_NOT_FOUND = 404;
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -83,11 +82,6 @@ function describe(err: unknown): string {
 
 function log(message: string): void {
   process.stderr.write(`[preview/proxy] ${message}\n`);
-}
-
-/** True when the proxy error target is an HTTP response (web), not a socket (ws). */
-function isServerResponse(value: ServerResponse | Socket): value is ServerResponse {
-  return typeof (value as ServerResponse).writeHead === "function";
 }
 
 /** Destroy a socket/stream, swallowing any error (it may already be gone). */
@@ -113,19 +107,31 @@ function writeBadGateway(res: ServerResponse, targetPort: number, err: unknown):
   }
 }
 
+/** Answer a request for a port that isn't exposed (best-effort; never throws). */
+function writeNotExposed(res: ServerResponse, targetPort: number): void {
+  try {
+    if (!res.headersSent) {
+      res.writeHead(HTTP_NOT_FOUND, { "content-type": "text/plain; charset=utf-8" });
+    }
+    res.end(`Preview proxy: port :${targetPort} is not exposed`);
+  } catch {
+    // Socket already torn down.
+  }
+}
+
 export class PreviewProxyService {
-  /** targetPort → running proxy record. */
+  /** targetPort → proxy record. */
   private readonly byTarget = new Map<number, ProxyRecord>();
 
   /**
-   * Expose `targetPort` behind a 0.0.0.0 reverse proxy and return the assigned
-   * proxy port. Idempotent: if `targetPort` is already exposed, the existing
-   * proxy is reused and its port returned (no second listener).
+   * Expose `targetPort` so it is reachable at `/__preview/:port/` on the main
+   * daemon port. Idempotent: re-exposing an already-exposed target is a no-op.
+   * Returns the path prefix the dashboard should open.
    */
-  async expose(targetPort: number, address?: string): Promise<{ proxyPort: number }> {
+  expose(targetPort: number, address?: string): { prefix: string } {
     const existing = this.byTarget.get(targetPort);
     if (existing) {
-      return { proxyPort: existing.proxyPort };
+      return { prefix: previewPrefix(targetPort) };
     }
 
     const proxy = buildProxy(targetPort, formatUpstreamHost(address));
@@ -141,32 +147,16 @@ export class PreviewProxyService {
       log(`upstream :${targetPort} error: ${describe(err)}`);
     });
 
-    const server = http.createServer((req, res) => {
-      // 3-arg form (req, res, callback): the callback is the per-request error
-      // handler; together with the proxy "error" listener nothing crashes.
-      proxy.web(req, res, (err: Error) => {
-        writeBadGateway(res, targetPort, err);
-      });
+    // selfHandleResponse: intercept every upstream response. HTML is buffered and
+    // rewritten (inject <base>, fix root-absolute URLs) so assets resolve under
+    // the prefix; everything else is streamed straight through unchanged.
+    proxy.on("proxyRes", (proxyRes, _req, res) => {
+      pipeOrRewrite(proxyRes, res as ServerResponse, targetPort);
     });
 
-    // HMR / live-reload websockets — proxy the upgrade to the dev server.
-    server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
-      proxy.ws(req, socket, head, (err: Error) => {
-        log(`upstream :${targetPort} ws error: ${describe(err)}`);
-        destroyQuietly(socket);
-      });
-    });
-
-    // A late server-level error must never bubble up and crash the daemon.
-    server.on("error", (err) => {
-      log(`proxy server for :${targetPort} error: ${describe(err)}`);
-    });
-
-    const proxyPort = await listen(server);
-
-    this.byTarget.set(targetPort, { targetPort, proxyPort, server, proxy });
-    log(`exposed :${targetPort} at 0.0.0.0:${proxyPort}`);
-    return { proxyPort };
+    this.byTarget.set(targetPort, { targetPort, proxy });
+    log(`exposed :${targetPort} at ${previewPrefix(targetPort)}`);
+    return { prefix: previewPrefix(targetPort) };
   }
 
   /** Tear down the proxy for `targetPort`, if any. Idempotent. Never throws. */
@@ -179,12 +169,55 @@ export class PreviewProxyService {
     closeRecord(record);
   }
 
-  /** Snapshot of every running proxy (immutable copies). */
+  /** Whether `targetPort` is currently exposed. */
+  isExposed(targetPort: number): boolean {
+    return this.byTarget.has(targetPort);
+  }
+
+  /**
+   * Proxy a `/__preview/:port/<rest>` HTTP request to the upstream dev server.
+   * The `/__preview/:port` prefix is stripped before forwarding (`rest` is the
+   * upstream path, already starting with `/`). Never throws.
+   */
+  handleHttp(targetPort: number, rest: string, req: IncomingMessage, res: ServerResponse): void {
+    const record = this.byTarget.get(targetPort);
+    if (!record) {
+      writeNotExposed(res, targetPort);
+      return;
+    }
+    // Forward the upstream-relative path (prefix already stripped by the caller).
+    req.url = rest;
+    record.proxy.web(req, res, { ignorePath: false }, (err: Error) => {
+      writeBadGateway(res, targetPort, err);
+    });
+  }
+
+  /**
+   * Proxy a `/__preview/:port/<rest>` WebSocket upgrade (Vite HMR, etc.) to the
+   * upstream dev server. The prefix is stripped before forwarding. Never throws.
+   */
+  handleUpgrade(
+    targetPort: number,
+    rest: string,
+    req: IncomingMessage,
+    socket: Socket,
+    head: Buffer,
+  ): void {
+    const record = this.byTarget.get(targetPort);
+    if (!record) {
+      destroyQuietly(socket);
+      return;
+    }
+    req.url = rest;
+    record.proxy.ws(req, socket, head, { ignorePath: false }, (err: Error) => {
+      log(`upstream :${targetPort} ws error: ${describe(err)}`);
+      destroyQuietly(socket);
+    });
+  }
+
+  /** Snapshot of every exposed target (immutable copies). */
   list(): PreviewProxyEntry[] {
-    return [...this.byTarget.values()].map((r) => ({
-      targetPort: r.targetPort,
-      proxyPort: r.proxyPort,
-    }));
+    return [...this.byTarget.values()].map((r) => ({ targetPort: r.targetPort }));
   }
 
   /** Tear down every proxy. Called on daemon shutdown. Never throws. */
@@ -196,37 +229,71 @@ export class PreviewProxyService {
   }
 }
 
-/** Close one proxy record's server + proxy, swallowing any error. */
+/** True when the proxy error target is an HTTP response (web), not a socket (ws). */
+function isServerResponse(value: ServerResponse | Socket): value is ServerResponse {
+  return typeof (value as ServerResponse).writeHead === "function";
+}
+
+/**
+ * With `selfHandleResponse`, the proxy hands us the upstream response and we must
+ * relay it. HTML is buffered and rewritten so assets resolve under the preview
+ * prefix; every other content type is streamed through byte-for-byte. Never
+ * throws — on any error the client socket is closed best-effort.
+ */
+function pipeOrRewrite(
+  proxyRes: IncomingMessage,
+  res: ServerResponse,
+  targetPort: number,
+): void {
+  try {
+    const headers = { ...proxyRes.headers };
+    const status = proxyRes.statusCode ?? HTTP_BAD_GATEWAY;
+    const isHtml = (headers["content-type"] ?? "").toString().toLowerCase().includes("text/html");
+
+    if (!isHtml) {
+      // Non-HTML: stream straight through with the upstream headers/status.
+      res.writeHead(status, headers);
+      proxyRes.pipe(res);
+      return;
+    }
+
+    // HTML: buffer the body, rewrite it, and send with a corrected length. The
+    // upstream content-length no longer matches after rewriting, so drop it; also
+    // drop transfer-encoding (the dev server may have chunked the response) since
+    // we now send a single buffer with an explicit content-length, and the two
+    // headers are mutually exclusive (invalid HTTP if both are present).
+    delete headers["content-length"];
+    delete headers["transfer-encoding"];
+    const chunks: Buffer[] = [];
+    proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
+    proxyRes.on("end", () => {
+      try {
+        const body = Buffer.concat(chunks).toString("utf8");
+        const rewritten = rewriteHtml(body, targetPort);
+        const out = Buffer.from(rewritten, "utf8");
+        headers["content-length"] = String(out.length);
+        res.writeHead(status, headers);
+        res.end(out);
+      } catch (err) {
+        log(`html rewrite for :${targetPort} failed: ${describe(err)}`);
+        destroyQuietly(res);
+      }
+    });
+    proxyRes.on("error", (err) => {
+      log(`upstream :${targetPort} response error: ${describe(err)}`);
+      destroyQuietly(res);
+    });
+  } catch (err) {
+    log(`proxyRes handling for :${targetPort} failed: ${describe(err)}`);
+    destroyQuietly(res);
+  }
+}
+
+/** Close one proxy record, swallowing any error. */
 function closeRecord(record: ProxyRecord): void {
   try {
     record.proxy.close();
   } catch (err) {
     log(`proxy close for :${record.targetPort} failed: ${describe(err)}`);
   }
-  try {
-    record.server.close();
-  } catch (err) {
-    log(`server close for :${record.targetPort} failed: ${describe(err)}`);
-  }
-}
-
-/** Listen on 0.0.0.0:0 and resolve with the OS-assigned port. */
-function listen(server: Server): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const onError = (err: Error): void => {
-      server.off("listening", onListening);
-      reject(err);
-    };
-    const onListening = (): void => {
-      server.off("error", onError);
-      const address = server.address();
-      const port = address && typeof address === "object"
-        ? (address as AddressInfo).port
-        : 0;
-      resolve(port);
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen(PREVIEW_PROXY_EPHEMERAL_PORT, PREVIEW_PROXY_HOST);
-  });
 }

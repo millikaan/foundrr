@@ -3,8 +3,9 @@
  *   GET    /api/servers                       — latest detected listeners
  *   POST   /api/servers/scan                  — force a rescan, return list
  *   POST   /api/servers/:pid/stop             — stop any detected process
- *   POST   /api/servers/:port/expose          — start a 0.0.0.0 preview proxy
+ *   POST   /api/servers/:port/expose          — mount a path-based preview proxy
  *   DELETE /api/servers/:port/expose          — stop the preview proxy
+ *   ALL    /__preview/:port/*                 — reverse-proxy to the dev server
  *   GET    /api/servers/registered            — list registered servers
  *   POST   /api/servers/registered            — register a server
  *   DELETE /api/servers/registered/:id        — delete a registered server
@@ -60,21 +61,20 @@ function parsePort(raw: unknown): number | null {
 }
 
 /**
- * Return a new DetectedServer[] with exposedProxyPort attached to any server
- * whose port has a running preview proxy. Inputs are not mutated.
+ * Return a new DetectedServer[] with `exposed: true` attached to any server
+ * whose port has a path-mounted preview proxy. Inputs are not mutated.
  */
-function withProxyPorts(
+function withExposed(
   servers: readonly DetectedServer[],
-  proxies: readonly { targetPort: number; proxyPort: number }[],
+  proxies: readonly { targetPort: number }[],
 ): DetectedServer[] {
   if (proxies.length === 0) {
     return [...servers];
   }
-  const byTarget = new Map(proxies.map((p) => [p.targetPort, p.proxyPort]));
-  return servers.map((server): DetectedServer => {
-    const proxyPort = byTarget.get(server.port);
-    return proxyPort === undefined ? server : { ...server, exposedProxyPort: proxyPort };
-  });
+  const exposedPorts = new Set(proxies.map((p) => p.targetPort));
+  return servers.map((server): DetectedServer =>
+    exposedPorts.has(server.port) ? { ...server, exposed: true } : server,
+  );
 }
 
 /** Validate a RegisterServerBody: name/cwd/command must be non-empty strings. */
@@ -119,7 +119,7 @@ export function registerServersRoute(
       const servers = ctx.serverMonitor.ready
         ? ctx.serverMonitor.getLatest()
         : await ctx.serverMonitor.scanNow();
-      return withProxyPorts(servers, ctx.previewProxy.list());
+      return withExposed(servers, ctx.previewProxy.list());
     } catch (err) {
       return serverError(reply, err);
     }
@@ -150,12 +150,14 @@ export function registerServersRoute(
     },
   );
 
-  // ── Preview reverse-proxy (expose a localhost-only dev server on 0.0.0.0) ───
+  // ── Preview reverse-proxy (path-mounted on the MAIN daemon port) ────────────
   //
-  // SECURITY: the returned proxyPort is UNAUTHENTICATED raw access to the dev
-  // server on the LAN — the same exposure as that server binding 0.0.0.0. This
-  // is intentional for preview (a phone browser can't carry the dashboard
-  // token); every proxy is torn down on daemon shutdown (server.ts → stopAll()).
+  // The dev server is reachable at `/__preview/:port/…` on the SAME origin as
+  // the dashboard — over the LAN AND through an https tunnel, no separate port.
+  // SECURITY: the proxy entry points sit behind the SAME token gate as the rest
+  // of the dashboard (this expose route + the /__preview/* route are guarded,
+  // and the WS upgrade authenticates the token), so the preview is not an open
+  // relay. Every proxy is torn down on daemon shutdown (server.ts → stopAll()).
 
   app.post(
     "/api/servers/:port/expose",
@@ -171,8 +173,8 @@ export function registerServersRoute(
         const detected = (
           ctx.serverMonitor.ready ? ctx.serverMonitor.getLatest() : []
         ).find((s) => s.port === port);
-        const { proxyPort } = await ctx.previewProxy.expose(port, detected?.address);
-        return { proxyPort };
+        const { prefix } = ctx.previewProxy.expose(port, detected?.address);
+        return { exposed: true, prefix };
       } catch (err) {
         return serverError(reply, err);
       }
@@ -195,6 +197,10 @@ export function registerServersRoute(
       }
     },
   );
+
+  // The path-mounted preview proxy itself (`/__preview/:port/*`) is wired as an
+  // early onRequest hook in preview/http.ts (it must run before body parsing so
+  // it can stream the raw request), not as a route here.
 
   // ── Registered servers ────────────────────────────────────────────────────
 

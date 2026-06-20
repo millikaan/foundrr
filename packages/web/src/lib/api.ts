@@ -145,12 +145,13 @@ export function deleteRegistered(id: string): Promise<{ ok: true }> {
 }
 
 /**
- * Expose a (possibly localhost-only) dev server through a 0.0.0.0 reverse proxy
- * so it can be previewed remotely. Resolves with the proxy's listening port;
- * the preview URL is then `http://<dashboard-host>:<proxyPort>/`.
+ * Expose a (possibly localhost-only) dev server through the path-mounted preview
+ * proxy on the main daemon port. Resolves with the same-origin path prefix the
+ * preview is served under — `/__preview/<port>/` — so the preview opens at
+ * `<dashboard-origin>/__preview/<port>/` (works on LAN http AND https tunnel).
  */
-export function exposeServer(port: number): Promise<{ proxyPort: number }> {
-  return apiPost<{ proxyPort: number }>(`/api/servers/${port}/expose`);
+export function exposeServer(port: number): Promise<{ exposed: boolean; prefix: string }> {
+  return apiPost<{ exposed: boolean; prefix: string }>(`/api/servers/${port}/expose`);
 }
 
 /** Tear down the reverse proxy previously created by {@link exposeServer}. */

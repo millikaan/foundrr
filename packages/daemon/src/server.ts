@@ -14,6 +14,7 @@ import { getSettings } from "./db/settings-repo.js";
 import { EventHub } from "./events/event-hub.js";
 import { buildApp } from "./http/app.js";
 import { PreviewProxyService } from "./preview/proxy-service.js";
+import { wirePreviewUpgrades } from "./preview/upgrade.js";
 import { PtyManager } from "./pty/manager.js";
 import { ServerMonitor } from "./servers/monitor.js";
 import { TelegramService } from "./telegram/bot.js";
@@ -43,10 +44,11 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
   const serverMonitor = new ServerMonitor(db, registry);
   serverMonitor.start();
 
-  // Reverse proxies that expose localhost-only dev servers on 0.0.0.0 for
-  // remote preview. SECURITY: each exposed proxy port is unauthenticated raw
-  // access to that dev server on the LAN (same exposure as the dev server
-  // binding 0.0.0.0) — intentional for preview, torn down on shutdown below.
+  // Path-mounted reverse proxies that expose localhost-only dev servers under
+  // `/__preview/:port/…` on THIS daemon's port for remote preview. SECURITY: the
+  // proxy entry points sit behind the same dashboard token gate (see
+  // http/routes/servers.ts + preview/upgrade.ts), so the preview is not an open
+  // relay. Every proxy is torn down on shutdown below.
   const previewProxy = new PreviewProxyService();
 
   const ptyManager = new PtyManager();
@@ -113,6 +115,12 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     sharedApprovalPoller,
     tunnelManager,
   });
+
+  // Route preview WebSocket upgrades (Vite HMR, etc.) through the SAME daemon
+  // server under /__preview/:port/*, leaving the dashboard's own WS (/stream,
+  // /term) untouched. Must run after buildApp so @fastify/websocket's upgrade
+  // listener is already attached and we can delegate non-preview upgrades to it.
+  wirePreviewUpgrades(app.server, previewProxy, config);
 
   try {
     await app.listen({ port: config.port, host: config.host });

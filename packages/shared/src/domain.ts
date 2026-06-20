@@ -67,11 +67,12 @@ export interface DetectedServer {
   /** Matches a RegisteredServer by id when this detected process is a known one. */
   registeredId?: string;
   /**
-   * When set, Mission Control is running a 0.0.0.0 reverse proxy to this
-   * (often localhost-only) dev server on this port, so it can be previewed
-   * remotely at http://<dashboard-host>:<exposedProxyPort>/.
+   * True when Founder is running a path-mounted reverse proxy to this (often
+   * localhost-only) dev server, so it can be previewed on the SAME origin as the
+   * dashboard at `<dashboard-origin>/__preview/<port>/` — over the LAN AND
+   * through an https tunnel, with no separate port and no mixed content.
    */
-  exposedProxyPort?: number;
+  exposed?: boolean;
 }
 
 export interface RegisteredServer {

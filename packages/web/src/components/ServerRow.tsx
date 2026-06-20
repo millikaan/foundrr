@@ -11,15 +11,17 @@
  * only breathes when there is a live listening process. Everything else stays
  * quiet. The layout is fixed so per-row pending states never shift it.
  *
- * Remote-link gotcha: the "Open" link is built from `window.location.hostname`
- * (NEVER the literal "localhost"), so over Tailscale it targets the dev
- * machine rather than the phone viewing the dashboard.
+ * Remote-link gotcha: the direct "Open" link is built from
+ * `window.location.hostname` (NEVER the literal "localhost"), so over Tailscale
+ * it targets the dev machine rather than the phone viewing the dashboard. The
+ * Preview link is same-origin (`/__preview/<port>/`), so it just inherits the
+ * dashboard's own protocol+host.
  */
 import type { DetectedServer, RegisteredServer } from "@mission-control/shared";
 import { Pulse } from "./Pulse";
 import { truncate } from "../lib/format";
 import { isWebServer } from "../lib/serverKind";
-import { checkPreviewReachable, previewUnreachableMessage, previewUrl } from "../lib/preview";
+import { previewUrl } from "../lib/preview";
 
 export type ServerAction =
   | "open"
@@ -100,13 +102,9 @@ export function ServerRow({ entry, pending, error, onAction }: ServerRowProps) {
   const command = detected?.command ?? registered?.command ?? "";
   const name = registered?.name;
   const ariaName = name ?? (port ? `port ${port}` : "server");
-  // When set, a 0.0.0.0 reverse proxy is live for this server — preview is on.
-  const proxyPort = detected?.exposedProxyPort;
-  const isExposed = proxyPort !== undefined;
-  // The proxy serves plain HTTP on a LAN-only port. From an HTTPS or remote
-  // context it can't open (mixed content / unroutable), so OPEN PREVIEW becomes
-  // an explained, disabled state rather than a dead link to about:blank.
-  const previewReachable = checkPreviewReachable().reachable;
+  // When true, a path-mounted reverse proxy is live for this server — preview is
+  // on, reachable at the same-origin `/__preview/<port>/` URL.
+  const isExposed = Boolean(detected?.exposed);
   // Only offer browser affordances (Open / Preview) for things that actually
   // look like a web server — not background system services (ControlCenter,
   // Spotify, …) that merely hold a port. STOP is still allowed for anything.
@@ -165,10 +163,11 @@ export function ServerRow({ entry, pending, error, onAction }: ServerRowProps) {
             </a>
           ) : null}
 
-          {/* Preview: the always-works path. Exposes a 0.0.0.0 reverse proxy to
-              this (often localhost-only) dev server, then opens it on the
-              dashboard host so a phone over LAN/Tailscale can reach it. Only
-              for things that look like a web server. */}
+          {/* Preview: the always-works path. Mounts a path-based reverse proxy
+              to this (often localhost-only) dev server on the SAME origin as the
+              dashboard, then opens `/__preview/<port>/` — so it reaches the dev
+              server over the LAN AND through an https tunnel, no separate port,
+              no mixed content. Only for things that look like a web server. */}
           {/* Preview is the primary action — the only amber-outlined control. */}
           {showOpen && !isExposed ? (
             <ControlButton
@@ -181,26 +180,14 @@ export function ServerRow({ entry, pending, error, onAction }: ServerRowProps) {
 
           {showOpen && isExposed ? (
             <>
-              {previewReachable ? (
-                <a
-                  href={previewUrl(proxyPort)}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="pill pill-primary"
-                >
-                  OPEN PREVIEW
-                </a>
-              ) : (
-                // HTTPS/remote: the http LAN proxy can't open from here. Render a
-                // disabled, explained chip instead of a dead link to about:blank.
-                <span
-                  className="pill cursor-not-allowed opacity-40"
-                  title={previewUnreachableMessage(proxyPort)}
-                  style={{ color: "var(--color-faint)" }}
-                >
-                  PREVIEW (LAN ONLY)
-                </span>
-              )}
+              <a
+                href={previewUrl(port as number)}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="pill pill-primary"
+              >
+                OPEN PREVIEW
+              </a>
               <ControlButton
                 label="STOP PREVIEW"
                 variant="danger"
@@ -271,21 +258,19 @@ export function ServerRow({ entry, pending, error, onAction }: ServerRowProps) {
       {isExposed ? (
         <p
           className="mono text-[0.625rem] leading-tight"
-          style={{ color: previewReachable ? "var(--color-signal)" : "var(--color-faint)" }}
+          style={{ color: "var(--color-signal)" }}
         >
-          {/* Always surface the http proxy URL as copyable text so the user can
-              try it manually on the LAN, even when it can't auto-open here. */}
+          {/* Surface the same-origin preview URL as copyable text. */}
           Previewing →{" "}
           <span className="select-all" style={{ color: "var(--color-text)" }}>
-            {previewUrl(proxyPort)}
+            {previewUrl(port as number)}
           </span>
-          {previewReachable ? null : " (open on the same Wi-Fi)"}
         </p>
       ) : showOpen ? (
         <p
           className="text-[0.625rem] leading-tight"
           style={{ color: "var(--color-faint)" }}
-          title="Preview opens a 0.0.0.0 reverse proxy, so it reaches the dev server even when it only listens on localhost."
+          title="Preview mounts a reverse proxy on this dashboard's origin, so it reaches the dev server even when it only listens on localhost — over the LAN and through an https tunnel."
         >
           Preview works even when this server is localhost-only.
         </p>

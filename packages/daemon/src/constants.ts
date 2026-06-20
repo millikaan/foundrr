@@ -53,16 +53,11 @@ export const SCAN_COMMAND_TIMEOUT_MS = 4_000;
 export const COMMAND_MAX = 512;
 
 // ─── Preview reverse-proxy ───────────────────────────────────────────────────
-
-/**
- * Bind host for preview reverse-proxies. Always 0.0.0.0 so an exposed dev
- * server is reachable over the LAN/Tailscale regardless of the dev server's own
- * (usually 127.0.0.1) bind address — that's the whole point of the proxy.
- */
-export const PREVIEW_PROXY_HOST = "0.0.0.0";
-
-/** OS-assigned ephemeral port for a freshly created preview proxy. */
-export const PREVIEW_PROXY_EPHEMERAL_PORT = 0;
+//
+// The preview proxy is PATH-MOUNTED on the main daemon HTTP server under
+// `/__preview/:port/…` (see preview/proxy-service.ts + preview/path.ts), so it
+// shares the dashboard's origin and works over the LAN AND an https tunnel. It
+// no longer opens a separate listener, so there is no bind host / port here.
 
 // ─── Terminal (M3) ─────────────────────────────────────────────────────────
 

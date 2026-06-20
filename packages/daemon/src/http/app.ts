@@ -7,6 +7,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { registerOtelRoute } from "../otel/receiver.js";
+import { registerPreviewHttp } from "../preview/http.js";
 import { registerStreamRoute } from "../ws/stream.js";
 import { registerTermRoute } from "../ws/term.js";
 import type { AppContext } from "./context.js";
@@ -31,6 +32,12 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   });
 
   await app.register(fastifyWebsocket);
+
+  // Path-mounted preview proxy (`/__preview/:port/*`). Registered as an early
+  // onRequest hook (before body parsing) so it can stream the raw request to the
+  // dev server; authenticated with the dashboard token. Wired before everything
+  // else so a preview request is intercepted before any route/static handling.
+  registerPreviewHttp(app, ctx);
 
   // API + ingest + stream (registered before static so they take precedence).
   registerHealthRoute(app);
