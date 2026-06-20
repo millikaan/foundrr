@@ -13,8 +13,9 @@
  *
  * The page is calm/cool when idle and lights up amber when agents are active.
  */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { hasToken } from "./lib/token";
+import { getConfig, getAgents, type LaunchableAgent } from "./lib/api";
 import { useStream } from "./lib/useStream";
 import { useNow } from "./lib/useNow";
 import { Header } from "./components/Header";
@@ -86,6 +87,39 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
   const { sessions, servers, approvals, cost, status, serverTime } = useStream();
   const now = useNow(serverTime);
 
+  // The selected model key, lifted here so the Header picker and the Terminal's
+  // launch button stay in lockstep without either touching the terminal refs.
+  // null = not loaded yet. Seeded from /api/config, then owned locally so a pick
+  // updates both surfaces immediately (the picker still persists to the daemon).
+  const [model, setModel] = useState<string | null>(null);
+  // Launchable agents + install state for the picker hints. null = unknown.
+  const [agentsState, setAgentsState] = useState<LaunchableAgent[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getConfig()
+      .then((config) => {
+        if (!cancelled) setModel(config.model);
+      })
+      .catch(() => {
+        if (!cancelled) setModel(null);
+      });
+    getAgents()
+      .then((list) => {
+        if (!cancelled) setAgentsState(list);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentsState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onModelChange = useCallback((next: string): void => {
+    setModel(next);
+  }, []);
+
   // The "Access from anywhere" drawer — opened from the Header's Connect button.
   const [accessOpen, setAccessOpen] = useState(false);
   // Bumped to remount the terminal subtree when its boundary is reset, giving
@@ -106,7 +140,7 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
       label="Terminal"
       onReset={() => setTerminalKey((k) => k + 1)}
     >
-      <TerminalTabs key={terminalKey} />
+      <TerminalTabs key={terminalKey} model={model} />
     </ErrorBoundary>
   );
 
@@ -123,6 +157,9 @@ function Dashboard({ surface, onSurfaceChange }: DashboardProps) {
         cost={cost}
         telegram={<TelegramStatus />}
         onOpenAccess={() => setAccessOpen(true)}
+        model={model}
+        agents={agentsState}
+        onModelChange={onModelChange}
       />
 
       {accessOpen ? <AccessPanel onClose={() => setAccessOpen(false)} /> : null}

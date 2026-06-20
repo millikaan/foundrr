@@ -17,13 +17,42 @@ export interface ModelInfo {
   readonly vendor: string;
   /** Brand accent color (hex), used by the web leaderboard. */
   readonly accent: string;
+  /**
+   * The terminal CLI command to launch this agent in a PTY (e.g. "claude").
+   * Undefined means the agent is IDE/editor-based (Cursor, Copilot, …) and has
+   * no terminal launcher — the Founder terminal cannot boot it.
+   */
+  readonly command?: string;
+  /** A short install hint shown when the CLI is not on PATH. */
+  readonly install?: string;
 }
 
 /** Canonical top-10 AI coding agents. Order is the default leaderboard order. */
 export const MODELS: readonly ModelInfo[] = Object.freeze([
-  { key: "claude-code", name: "Claude Code", vendor: "Anthropic", accent: "#f2a23c" },
-  { key: "openai-codex", name: "OpenAI Codex", vendor: "OpenAI", accent: "#10a37f" },
-  { key: "gemini-cli", name: "Gemini CLI", vendor: "Google", accent: "#4285f4" },
+  {
+    key: "claude-code",
+    name: "Claude Code",
+    vendor: "Anthropic",
+    accent: "#f2a23c",
+    command: "claude",
+    install: "https://claude.com/claude-code",
+  },
+  {
+    key: "openai-codex",
+    name: "OpenAI Codex",
+    vendor: "OpenAI",
+    accent: "#10a37f",
+    command: "codex",
+    install: "npm i -g @openai/codex (or see openai.com/codex)",
+  },
+  {
+    key: "gemini-cli",
+    name: "Gemini CLI",
+    vendor: "Google",
+    accent: "#4285f4",
+    command: "gemini",
+    install: "npm i -g @google/gemini-cli",
+  },
   { key: "cursor", name: "Cursor", vendor: "Anysphere", accent: "#e6eaf0" },
   {
     key: "github-copilot",
@@ -31,7 +60,14 @@ export const MODELS: readonly ModelInfo[] = Object.freeze([
     vendor: "GitHub / Microsoft",
     accent: "#8b5cf6",
   },
-  { key: "aider", name: "Aider", vendor: "open source", accent: "#74c69d" },
+  {
+    key: "aider",
+    name: "Aider",
+    vendor: "open source",
+    accent: "#74c69d",
+    command: "aider",
+    install: "pipx install aider-chat",
+  },
   { key: "cline", name: "Cline", vendor: "open source", accent: "#56b6c2" },
   { key: "windsurf", name: "Windsurf", vendor: "Codeium", accent: "#06b6d4" },
   { key: "continue", name: "Continue", vendor: "open source", accent: "#f59e0b" },
@@ -40,6 +76,8 @@ export const MODELS: readonly ModelInfo[] = Object.freeze([
     name: "Amazon Q Developer",
     vendor: "AWS",
     accent: "#ff9900",
+    command: "q",
+    install: "see AWS Amazon Q Developer CLI",
   },
 ]);
 
@@ -49,4 +87,12 @@ export const DEFAULT_MODEL = "claude-code";
 /** Look up a model by its stable key; undefined if no match. */
 export function modelByKey(key: string): ModelInfo | undefined {
   return MODELS.find((m) => m.key === key);
+}
+
+/**
+ * The models the Founder terminal can launch — those with a `command` (a CLI
+ * agent). IDE/editor-based models (Cursor, Copilot, …) are excluded.
+ */
+export function launchableModels(): readonly ModelInfo[] {
+  return MODELS.filter((m) => typeof m.command === "string");
 }

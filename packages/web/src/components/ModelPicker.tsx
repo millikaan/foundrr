@@ -1,22 +1,33 @@
 /**
  * ModelPicker — a compact "pick your AI model" control that lives in the Header.
- * The chosen model tags telemetry and the global leaderboard bucket, so this is
- * the user's identity on the board.
+ * The chosen model tags telemetry and the global leaderboard bucket, AND drives
+ * which agent the Founder terminal launches — so it is the user's identity on
+ * the board and the terminal's launch target.
  *
- * On mount it reads the daemon's current model via GET /api/config. Choosing a
- * model optimistically updates the UI and POSTs to /api/config/model; on failure
- * it reverts to the last-known-good key and shows an inline error.
+ * Controlled by App: it receives the selected `model` key (lifted so the Header
+ * picker and the terminal launch button stay in lockstep), the launchable
+ * `agents` with install state (for a subtle "· not installed" hint), and an
+ * `onModelChange` callback. Choosing a model optimistically calls back, then
+ * POSTs to /api/config/model; on failure it reverts and shows an inline error.
  *
  * A real native <select> is used deliberately — it is the most robust,
  * keyboard-accessible, and mobile-friendly option, styled to the telemetry
- * console theme (dark, mono, hairline border). The active model gets a small
- * --signal accent dot (ModelInfo has no per-row accent of its own here).
+ * console theme (dark, mono, hairline border).
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { MODELS, modelByKey } from "@mission-control/shared";
 
-import { ApiError, getConfig, setModelApi } from "../lib/api";
+import { ApiError, setModelApi, type LaunchableAgent } from "../lib/api";
+
+interface ModelPickerProps {
+  /** The selected model key; null until loaded by the parent. */
+  model: string | null;
+  /** Launchable agents + install state; null if unknown (hints skipped). */
+  agents: LaunchableAgent[] | null;
+  /** Called with the new key when the user picks a model. */
+  onModelChange: (model: string) => void;
+}
 
 /** What the active model should show; falls back to the raw key if unknown. */
 function labelFor(key: string | null): string {
@@ -24,39 +35,34 @@ function labelFor(key: string | null): string {
   return modelByKey(key)?.name ?? key;
 }
 
-export function ModelPicker() {
-  // null = not loaded yet; a string is the last-known-good persisted key.
-  const [model, setModel] = useState<string | null>(null);
+/**
+ * The option label, with a subtle "· not installed" suffix when we know the
+ * agent's CLI is missing. Unknown install state (no /api/agents, or an
+ * IDE-based model not in the list) shows the plain name.
+ */
+function optionLabel(key: string, name: string, agents: LaunchableAgent[] | null): string {
+  if (!agents) return name;
+  const agent = agents.find((a) => a.key === key);
+  if (agent && !agent.installed) return `${name} · not installed`;
+  return name;
+}
+
+export function ModelPicker({ model, agents, onModelChange }: ModelPickerProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getConfig()
-      .then((config) => {
-        if (!cancelled) setModel(config.model);
-      })
-      .catch(() => {
-        // Status unknown — render a disabled control rather than crashing.
-        if (!cancelled) setModel(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const onSelect = async (next: string): Promise<void> => {
     const previous = model;
     if (next === previous) return;
-    // Optimistic: reflect the choice immediately, then persist.
-    setModel(next);
+    // Optimistic: reflect the choice immediately via the parent, then persist.
+    onModelChange(next);
     setPending(true);
     setError(null);
     try {
       await setModelApi(next);
     } catch (err: unknown) {
       // Revert to last-known-good and surface a short inline message.
-      setModel(previous);
+      if (previous) onModelChange(previous);
       const message =
         err instanceof ApiError && err.status === 400
           ? "invalid model"
@@ -124,7 +130,7 @@ export function ModelPicker() {
           {model === null ? <option value="">AI…</option> : null}
           {MODELS.map((m) => (
             <option key={m.key} value={m.key}>
-              {m.name}
+              {optionLabel(m.key, m.name, agents)}
             </option>
           ))}
         </select>

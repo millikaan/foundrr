@@ -10,10 +10,11 @@
  * Ptys outlive their sockets: closing a socket only detaches it. A pty is freed
  * on its own exit, on `kill(id)`, or when the daemon shuts down.
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
-import type { TerminalTabInfo } from "@mission-control/shared";
+import { modelByKey, type TerminalTabInfo } from "@mission-control/shared";
 
 import {
   TERM_DEFAULT_COLS,
@@ -67,7 +68,14 @@ const NODE_PTY_MODULE = "@homebridge/node-pty-prebuilt-multiarch";
 const TERM_NAME = "xterm-256color";
 
 export interface CreateOptions {
-  /** "claude" launches the Claude CLI; anything else falls back to a shell. */
+  /**
+   * What to launch:
+   *   - "shell" (or undefined) → the user's default login shell.
+   *   - any model key from the shared MODELS registry → that agent's CLI
+   *     (e.g. "claude-code" → `claude`, "openai-codex" → `codex`).
+   * A model with no `command`, or whose command is not on PATH, throws a clear
+   * "not installed" error that the /term route surfaces as an error frame.
+   */
   readonly shell?: string;
   /** Absolute working directory; validated to exist, else the home dir. */
   readonly cwd?: string;
@@ -145,7 +153,7 @@ export class PtyManager {
       }
     }
 
-    const { file, args, label } = resolveShell(options.shell);
+    const { file, args, label } = resolveLaunch(options.shell);
     const cwd = resolveCwd(options.cwd);
 
     const proc = this.module.spawn(file, args, {
@@ -165,7 +173,9 @@ export class PtyManager {
       id,
       title: label,
       cwd,
-      shell: options.shell === "claude" ? "claude" : file,
+      // Preserve the requested launch key (a model key like "claude-code", or
+      // "shell"/the resolved shell path) so a reload can restore the same tab.
+      shell: isModelKey(options.shell) ? options.shell : file,
       createdAt: Date.now(),
     };
 
@@ -338,15 +348,68 @@ interface ResolvedShell {
   label: string;
 }
 
-/** Resolve the launch command: "claude" → the CLI, else the user's shell. */
-function resolveShell(shell: string | undefined): ResolvedShell {
-  if (shell === "claude") {
-    return { file: "claude", args: [], label: "claude" };
+/** Whether `shell` names a model in the shared registry (vs "shell"/a path). */
+function isModelKey(shell: string | undefined): shell is string {
+  return typeof shell === "string" && modelByKey(shell) !== undefined;
+}
+
+/**
+ * Resolve what to launch:
+ *   - "shell"/undefined/an unknown value → the user's default login shell.
+ *   - a model key with a `command` on PATH → that agent's CLI.
+ * Throws a clear, user-facing error when the chosen model is IDE-based (no
+ * command) or its CLI is not installed, so the /term route can surface it as an
+ * error frame.
+ */
+function resolveLaunch(shell: string | undefined): ResolvedShell {
+  if (shell && shell !== "shell") {
+    const model = modelByKey(shell);
+    if (model) {
+      return resolveModelLaunch(model);
+    }
+    // Unknown key (not a model, not "shell") → fall through to the shell rather
+    // than spawning an arbitrary string as a command.
   }
   const file =
     process.env["SHELL"] ??
     (process.platform === "win32" ? "powershell.exe" : "/bin/bash");
   return { file, args: [], label: file };
+}
+
+/** Resolve a model to its CLI launch, asserting the command is installed. */
+function resolveModelLaunch(model: {
+  name: string;
+  command?: string;
+  install?: string;
+}): ResolvedShell {
+  const command = model.command;
+  if (!command) {
+    throw new Error(
+      `${model.name} is IDE-based and has no terminal agent. ` +
+        `Pick a CLI agent (e.g. Claude Code, OpenAI Codex, Gemini CLI), or open "+ Shell".`,
+    );
+  }
+  if (!isOnPath(command)) {
+    const hint = model.install ? ` Install: ${model.install}` : "";
+    throw new Error(
+      `${model.name} ('${command}') is not installed on this machine.${hint}`,
+    );
+  }
+  return { file: command, args: [], label: command };
+}
+
+/**
+ * Whether `command` resolves on PATH. Uses `which` (POSIX) / `where` (Windows)
+ * synchronously so create() can throw before spawning. Never throws itself.
+ */
+function isOnPath(command: string): boolean {
+  const probe = process.platform === "win32" ? "where" : "which";
+  try {
+    execFileSync(probe, [command], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Resolve cwd: a provided directory that exists, else the home dir. */

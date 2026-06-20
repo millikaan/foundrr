@@ -11,6 +11,7 @@ import { registerStreamRoute } from "../ws/stream.js";
 import { registerTermRoute } from "../ws/term.js";
 import type { AppContext } from "./context.js";
 import { registerAccessRoutes } from "./routes/access.js";
+import { registerAgentsRoute } from "./routes/agents.js";
 import { registerApprovalsRoutes } from "./routes/approvals.js";
 import { registerConfigRoutes } from "./routes/config.js";
 import { registerEventsRoute } from "./routes/events.js";
@@ -47,6 +48,9 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerAccessRoutes(app, ctx);
   // Local preferences — model picker backing (token-protected).
   registerConfigRoutes(app, ctx);
+  // Launchable agents + per-CLI install detection — powers the picker
+  // (token-protected).
+  registerAgentsRoute(app, ctx);
   // OTLP cost/token receiver — PUBLIC (no token); see otel/receiver.ts.
   registerOtelRoute(app, ctx);
   registerStreamRoute(app, ctx);

@@ -5,6 +5,7 @@
  */
 import type { ReactNode } from "react";
 import type { CostSnapshot } from "@mission-control/shared";
+import type { LaunchableAgent } from "../lib/api";
 import type { StreamStatus } from "../lib/useStream";
 import { CostMeter } from "./CostMeter";
 import { ModelPicker } from "./ModelPicker";
@@ -19,6 +20,12 @@ interface HeaderProps {
   telegram?: ReactNode;
   /** Open the "Access from anywhere" panel (the away-surface enabler). */
   onOpenAccess: () => void;
+  /** The selected model key (lifted to App); null until loaded. */
+  model: string | null;
+  /** Launchable agents + install state for the picker hints; null if unknown. */
+  agents: LaunchableAgent[] | null;
+  /** Called when the user picks a different model. */
+  onModelChange: (model: string) => void;
 }
 
 interface ConnStyle {
@@ -32,7 +39,16 @@ const CONN: Record<StreamStatus, ConnStyle> = {
   reconnecting: { label: "RECONNECTING", color: "var(--color-signal)" },
 };
 
-export function Header({ status, activeCount, cost, telegram, onOpenAccess }: HeaderProps) {
+export function Header({
+  status,
+  activeCount,
+  cost,
+  telegram,
+  onOpenAccess,
+  model,
+  agents,
+  onModelChange,
+}: HeaderProps) {
   const conn = CONN[status];
   const anyActive = activeCount > 0;
 
@@ -68,8 +84,9 @@ export function Header({ status, activeCount, cost, telegram, onOpenAccess }: He
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-          {/* Pick your AI — tags telemetry + the global leaderboard bucket. */}
-          <ModelPicker />
+          {/* Pick your AI — tags telemetry + the global leaderboard bucket, and
+              drives which agent the terminal launches. */}
+          <ModelPicker model={model} agents={agents} onModelChange={onModelChange} />
 
           {/* Away-surface enabler — visible on desktop AND mobile. */}
           <button

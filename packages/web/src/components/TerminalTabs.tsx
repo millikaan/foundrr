@@ -3,8 +3,11 @@
  *
  * Each tab is one PTY (one WS /term). New tabs are minted with a fresh
  * crypto.randomUUID() id and a chosen shell:
- *   - "+ Shell"  → the daemon's default login shell.
- *   - "+ Claude" → spawns the `claude` CLI (shell === "claude").
+ *   - "+ Shell"      → the daemon's default login shell.
+ *   - "+ <Model>"    → spawns the currently-picked agent's CLI (shell === the
+ *                      model key, e.g. "claude-code" → `claude`). The daemon
+ *                      detects whether that CLI is installed and, if not, sends
+ *                      an error frame the terminal panel renders.
  *
  * All open tabs stay MOUNTED; inactive ones are hidden with CSS rather than
  * unmounted, so their socket stays live and background output / scrollback is
@@ -16,13 +19,26 @@
  * so we don't show tabs whose PTYs already died.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { modelByKey } from "@mission-control/shared";
 import { killTerminal, listTerminals } from "../lib/api";
 import { Terminal, type TerminalHandle } from "./Terminal";
 import { TerminalInputBar } from "./TerminalInputBar";
 
+interface TerminalTabsProps {
+  /**
+   * The selected model key (lifted from App). The agent launch button follows
+   * it: "+ <ModelName>" opens a terminal with `shell=<modelKey>`. null until
+   * loaded. A model with no CLI command (IDE-based) disables the button.
+   */
+  model: string | null;
+}
+
 interface TermTab {
   id: string;
-  /** "claude" or "shell" — what to spawn; "shell" maps to the default shell. */
+  /**
+   * What to spawn: "shell" (the default login shell) or a model key (e.g.
+   * "claude-code") that the daemon maps to the agent's CLI.
+   */
   shell: string;
   /** Human label shown on the tab. */
   label: string;
@@ -71,6 +87,17 @@ function nextLabel(existing: TermTab[], base: string): string {
 }
 
 /**
+ * Map a daemon-reported `shell` back to a launch value when adopting a live tab.
+ * A known model key passes through; legacy "claude" maps to "claude-code"; a
+ * shell path (or anything else) becomes "shell".
+ */
+function adoptShell(shell: string): string {
+  if (modelByKey(shell)) return shell;
+  if (shell === "claude") return "claude-code";
+  return "shell";
+}
+
+/**
  * Secure-context-safe random id. `crypto.randomUUID()` only exists in a secure
  * context (HTTPS or localhost); when Founder is opened over plain HTTP on a LAN
  * IP (e.g. http://192.168.x.x:7878 from a phone) it is undefined and throws.
@@ -91,7 +118,7 @@ function randomId(): string {
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function TerminalTabs() {
+export function TerminalTabs({ model }: TerminalTabsProps) {
   const [tabs, setTabs] = useState<TermTab[]>(() => loadStoredTabs());
   const [activeId, setActiveId] = useState<string | null>(
     () => loadStoredTabs()[0]?.id ?? null,
@@ -179,11 +206,14 @@ export function TerminalTabs() {
           const keptIds = new Set(kept.map((t) => t.id));
           const adopted: TermTab[] = live
             .filter((t) => !keptIds.has(t.id))
-            .map((t) => ({
-              id: t.id,
-              shell: t.shell === "claude" ? "claude" : "shell",
-              label: t.title || (t.shell === "claude" ? "Claude" : "Shell"),
-            }));
+            .map((t) => {
+              // The daemon reports the launch key in `shell`: a model key (e.g.
+              // "claude-code"), the legacy "claude", or a shell path. Map it back
+              // to a launch value + a friendly label.
+              const launched = adoptShell(t.shell);
+              const fallback = modelByKey(launched)?.name ?? "Shell";
+              return { id: t.id, shell: launched, label: t.title || fallback };
+            });
           const next = [...kept, ...adopted];
           return next;
         });
@@ -223,6 +253,21 @@ export function TerminalTabs() {
     setTabs((prev) => prev.filter((t) => t.id !== id));
     void killTerminal(id).catch(() => undefined);
   }, []);
+
+  // The agent launch button follows the picked model. Only a model with a CLI
+  // `command` is launchable; IDE-based ones disable the button with a tooltip.
+  // `agentLaunch` carries the launch key + display name when launchable.
+  const selectedModel = model ? modelByKey(model) : undefined;
+  const agentLaunch =
+    selectedModel && selectedModel.command
+      ? { key: selectedModel.key, name: selectedModel.name }
+      : null;
+  const agentLabel = selectedModel ? `+ ${selectedModel.name}` : "+ Agent";
+  const agentTitle = agentLaunch
+    ? `Launch ${agentLaunch.name} in a terminal`
+    : selectedModel
+      ? `${selectedModel.name} is IDE-based — no terminal agent. Pick Claude/Codex/Gemini, or use + Shell.`
+      : "Loading model…";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -282,11 +327,13 @@ export function TerminalTabs() {
           </button>
           <button
             type="button"
-            onClick={() => openTab("claude", "Claude")}
-            className="mono rounded-md px-2 py-1 text-xs tracking-wide transition-colors"
+            onClick={() => agentLaunch && openTab(agentLaunch.key, agentLaunch.name)}
+            disabled={!agentLaunch}
+            title={agentTitle}
+            className="mono rounded-md px-2 py-1 text-xs tracking-wide transition-colors disabled:cursor-default disabled:opacity-50"
             style={{ color: "var(--color-signal)", border: "1px solid var(--color-line)" }}
           >
-            + Claude
+            {agentLabel}
           </button>
         </div>
       </div>
@@ -303,7 +350,7 @@ export function TerminalTabs() {
             </p>
             <p className="text-sm" style={{ color: "var(--color-faint)" }}>
               Start a <span className="mono" style={{ color: "var(--color-cool)" }}>+ Shell</span> or{" "}
-              <span className="mono" style={{ color: "var(--color-signal)" }}>+ Claude</span> session.
+              <span className="mono" style={{ color: "var(--color-signal)" }}>{agentLabel}</span> session.
             </p>
           </div>
         ) : (

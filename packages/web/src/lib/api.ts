@@ -344,6 +344,47 @@ export async function setModelApi(model: string): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Agents — launchable terminal CLIs + per-command install detection.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One launchable agent from `GET /api/agents`. */
+export interface LaunchableAgent {
+  /** Stable model key (e.g. "claude-code"). */
+  key: string;
+  /** Display name (e.g. "Claude Code"). */
+  name: string;
+  /** The terminal CLI command (e.g. "claude"). */
+  command: string;
+  /** Whether the command resolves on the daemon's PATH. */
+  installed: boolean;
+  /** Short install hint shown when not installed. */
+  install?: string;
+}
+
+/**
+ * Fetch the launchable agents and their install state. Defensive: any failure —
+ * a missing route, network error, or malformed payload — resolves to `null` so
+ * the picker simply skips the install hints rather than crashing.
+ */
+export async function getAgents(): Promise<LaunchableAgent[] | null> {
+  try {
+    const agents = await apiGet<unknown>("/api/agents");
+    if (!Array.isArray(agents)) return null;
+    return agents.filter(
+      (a): a is LaunchableAgent =>
+        a !== null &&
+        typeof a === "object" &&
+        typeof (a as LaunchableAgent).key === "string" &&
+        typeof (a as LaunchableAgent).command === "string" &&
+        typeof (a as LaunchableAgent).installed === "boolean",
+    );
+  } catch {
+    // 404 / network / parse error → unknown. Never crash the dashboard.
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Telegram (M6) — link status for the away-surface indicator.
 // ─────────────────────────────────────────────────────────────────────────────
 
