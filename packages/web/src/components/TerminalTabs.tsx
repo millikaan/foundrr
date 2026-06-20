@@ -70,6 +70,27 @@ function nextLabel(existing: TermTab[], base: string): string {
   return used === 0 ? base : `${base} ${used + 1}`;
 }
 
+/**
+ * Secure-context-safe random id. `crypto.randomUUID()` only exists in a secure
+ * context (HTTPS or localhost); when Founder is opened over plain HTTP on a LAN
+ * IP (e.g. http://192.168.x.x:7878 from a phone) it is undefined and throws.
+ * Fall back to getRandomValues, then to a non-crypto id — these are just local
+ * tab identifiers, not security tokens.
+ */
+function randomId(): string {
+  const c: Crypto | undefined = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  if (c && typeof c.getRandomValues === "function") {
+    const b = new Uint8Array(16);
+    c.getRandomValues(b);
+    b[6] = (b[6]! & 0x0f) | 0x40;
+    b[8] = (b[8]! & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function TerminalTabs() {
   const [tabs, setTabs] = useState<TermTab[]>(() => loadStoredTabs());
   const [activeId, setActiveId] = useState<string | null>(
@@ -189,7 +210,7 @@ export function TerminalTabs() {
 
   const openTab = useCallback((shell: string, base: string): void => {
     setTabs((prev) => {
-      const id = crypto.randomUUID();
+      const id = randomId();
       const tab: TermTab = { id, shell, label: nextLabel(prev, base) };
       setActiveId(id);
       return [...prev, tab];
