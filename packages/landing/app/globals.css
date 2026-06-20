@@ -676,6 +676,11 @@ body {
 .line-mask {
   display: block;
   overflow: hidden;
+  /* The tight reveal clip was cutting descenders (g/y/p) on the last line.
+     Pad the clip box downward for descender room, then pull it back with an
+     equal negative margin so line spacing/layout stay exactly the same. */
+  padding-bottom: 0.24em;
+  margin-bottom: -0.24em;
 }
 .line-rise {
   display: block;
