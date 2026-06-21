@@ -20,3 +20,6 @@ agentdb.rvf
 agentdb.rvf.lock
 *.rvf
 *.rvf.lock
+
+# Marketing landing site — deployed via Vercel, kept out of the tool repo
+packages/landing/
