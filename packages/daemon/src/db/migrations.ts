@@ -71,6 +71,22 @@ CREATE TABLE IF NOT EXISTS cost_daily (
   usd REAL NOT NULL DEFAULT 0,
   tokens INTEGER NOT NULL DEFAULT 0
 );
+
+-- Pro/Team license. Singleton (one install = one key). The daemon caches the
+-- last verify verdict here so a paid plan survives an offline grace window
+-- (last_verified_at) and a restart never re-prompts. Billing/issuance lives in
+-- the landing app; this row is only the locally-cached entitlement.
+CREATE TABLE IF NOT EXISTS license (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  license_key TEXT,
+  plan TEXT,
+  status TEXT,
+  seats INTEGER NOT NULL DEFAULT 0,
+  period_end TEXT,
+  active INTEGER NOT NULL DEFAULT 0,
+  last_verified_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT
+);
 `;
 
 /**

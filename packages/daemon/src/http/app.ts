@@ -19,6 +19,7 @@ import { registerCostRoutes } from "./routes/cost.js";
 import { registerEventsRoute } from "./routes/events.js";
 import { registerGitRoute } from "./routes/git.js";
 import { registerHealthRoute } from "./routes/health.js";
+import { registerLicenseRoutes } from "./routes/license.js";
 import { registerServersRoute } from "./routes/servers.js";
 import { registerSessionsRoute } from "./routes/sessions.js";
 import { registerTelegramRoute } from "./routes/telegram.js";
@@ -52,6 +53,8 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerApprovalsRoutes(app, ctx);
   // Cost history CSV export (token-protected).
   registerCostRoutes(app, ctx);
+  // Pro/Team license — set/verify/clear the entitlement key (token-protected).
+  registerLicenseRoutes(app, ctx);
   // Telegram link status — dashboard away-surface indicator (token-protected).
   registerTelegramRoute(app, ctx);
   // "Access from anywhere" panel — addresses + managed tunnel (token-protected).

@@ -7,6 +7,7 @@ import type {
   AgentSession,
   ApprovalDecision,
   DetectedServer,
+  Entitlement,
   GitStatus,
   RegisteredServer,
   RegisterServerBody,
@@ -472,4 +473,27 @@ export async function getTelegramStatus(): Promise<TelegramStatus | null> {
     // 404 / network / parse error → status unknown. Never crash the dashboard.
     return null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// License — Pro/Team entitlement (set/verify/clear the key).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fetch the current entitlement (cached verdict + grace resolution). */
+export function getLicense(): Promise<Entitlement> {
+  return apiGet<Entitlement>("/api/license");
+}
+
+/**
+ * Store a license key and verify it immediately. Resolves with the freshly
+ * resolved entitlement. Throws `ApiError` (status 400) on an empty key, or on a
+ * missing token / network / 5xx so the caller can surface the failure.
+ */
+export function saveLicense(key: string): Promise<Entitlement> {
+  return apiPost<Entitlement>("/api/license", { key });
+}
+
+/** Remove the stored key; resolves with the (now free) entitlement. */
+export function removeLicense(): Promise<Entitlement> {
+  return apiDelete<Entitlement>("/api/license");
 }

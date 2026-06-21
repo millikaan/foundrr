@@ -20,6 +20,7 @@ import type { StreamStatus } from "../lib/useStream";
 import { usd, compactTokens } from "../lib/format";
 import { ModelPicker } from "./ModelPicker";
 import { BudgetMeter } from "./BudgetMeter";
+import { LicenseSection } from "./LicenseSection";
 import { applyTheme, readTheme } from "./ThemeToggle";
 import { resetOnboarding } from "./Onboarding";
 
@@ -203,6 +204,8 @@ export function SettingsPage({
           <ThemeControl />
         </Row>
       </Section>
+
+      <LicenseSection />
 
       <Section title="Remote access">
         <Row

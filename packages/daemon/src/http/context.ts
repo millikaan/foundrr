@@ -8,6 +8,7 @@ import type { ApprovalStore } from "../approvals/store.js";
 import type { Config } from "../config.js";
 import type { CostStore } from "../cost/store.js";
 import type { EventHub } from "../events/event-hub.js";
+import type { LicenseService } from "../license/service.js";
 import type { PreviewProxyService } from "../preview/proxy-service.js";
 import type { PtyManager } from "../pty/manager.js";
 import type { ServerMonitor } from "../servers/monitor.js";
@@ -26,6 +27,8 @@ export interface AppContext {
   readonly previewProxy: PreviewProxyService;
   readonly ptyManager: PtyManager;
   readonly costStore: CostStore;
+  /** Pro/Team entitlement: stores the key, verifies it, resolves the plan. */
+  readonly licenseService: LicenseService;
   readonly approvalStore: ApprovalStore;
   /** Local grammY bot (M6/M7 "own" mode). */
   readonly telegram: TelegramService;

@@ -13,6 +13,7 @@ import { openDb } from "./db/index.js";
 import { getSettings } from "./db/settings-repo.js";
 import { EventHub } from "./events/event-hub.js";
 import { buildApp } from "./http/app.js";
+import { LicenseService } from "./license/service.js";
 import { PreviewProxyService } from "./preview/proxy-service.js";
 import { wirePreviewUpgrades } from "./preview/upgrade.js";
 import { PtyManager } from "./pty/manager.js";
@@ -53,6 +54,12 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
 
   const ptyManager = new PtyManager();
   const costStore = new CostStore(registry, db);
+
+  // Pro/Team entitlement. Verifies the stored key on launch + daily and caches
+  // the verdict (with an offline grace window). Never blocks startup — verify is
+  // fire-and-forget. Stopped on close() so the daily timer never outlives us.
+  const licenseService = new LicenseService(db);
+  licenseService.start();
 
   // Anonymous global usage sharing (P4). On by default, single-flag opt-out via
   // `mc telemetry share off`. Reads the cost store's lifetime totals, diffs them
@@ -109,6 +116,7 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     previewProxy,
     ptyManager,
     costStore,
+    licenseService,
     approvalStore,
     telegram,
     sharedBot,
@@ -130,6 +138,7 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     previewProxy.stopAll();
     ptyManager.killAll();
     costStore.stop();
+    licenseService.stop();
     telemetryReporter.stop();
     approvalStore.stop();
     sharedApprovalPoller.stopAll();
@@ -148,6 +157,7 @@ export async function startDaemon(config: Config): Promise<RunningDaemon> {
     previewProxy.stopAll();
     ptyManager.killAll();
     costStore.stop();
+    licenseService.stop();
     telemetryReporter.stop();
     approvalStore.stop();
     // Stop any in-flight shared-approval pollers before tearing down the bot.

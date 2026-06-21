@@ -137,6 +137,42 @@ export interface CostSnapshot {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Licensing — Pro/Team entitlement (billing lives in the landing app)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The plan a license grants. "free" is the unlicensed local baseline; the paid
+ * tiers mirror the Stripe products (Starter $3 / Pro $7 / Team $12-seat).
+ */
+export type LicensePlan = "free" | "starter" | "pro" | "team";
+
+/**
+ * The daemon's resolved licensing state — the daemon↔dashboard wire shape for
+ * `GET/POST/DELETE /api/license`. `plan` is the EFFECTIVE plan after the offline
+ * grace window is applied, so feature gates read this single field.
+ */
+export interface Entitlement {
+  /** Effective plan after grace resolution. "free" when no valid license. */
+  plan: LicensePlan;
+  /** A paid plan is currently usable (verified active, or within grace). */
+  active: boolean;
+  /** Raw subscription status from billing ("active"/"past_due"/…), or "none". */
+  status: string;
+  /** Seats the license grants (Team); 0 when none. */
+  seats: number;
+  /** ISO timestamp the current billing period ends, or null. */
+  periodEnd: string | null;
+  /** Whether any key is stored at all (independent of validity). */
+  hasKey: boolean;
+  /** Masked key for display, e.g. "FNDR-••••-7Q3K"; null when no key. */
+  maskedKey: string | null;
+  /** ms epoch of the last SUCCESSFUL verify; 0 if never confirmed. */
+  lastVerifiedAt: number;
+  /** Running on cached entitlement because the last re-verify failed / is overdue. */
+  stale: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Git (M4)
 // ─────────────────────────────────────────────────────────────────────────────
 

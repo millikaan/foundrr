@@ -180,3 +180,29 @@ export const SHARED_BOT_POLL_INTERVAL_MS = 2_000;
  * request.
  */
 export const SHARED_BOT_POLL_BUDGET_MS = 48_000;
+
+// ─── Licensing (Pro/Team entitlement) ────────────────────────────────────────
+
+/**
+ * Base URL of the license authority (the landing app's API). The daemon POSTs
+ * the stored key to `${base}/api/license/verify` on launch + daily. Overridable
+ * via FOUNDRR_LICENSE_URL for self-hosting / testing.
+ */
+export const LICENSE_DEFAULT_URL = "https://www.foundrr.online";
+
+/** Path of the verify endpoint, appended to the license base URL. */
+export const LICENSE_VERIFY_PATH = "/api/license/verify";
+
+/** Hard timeout on a verify call. Must never block the daemon's startup path. */
+export const LICENSE_REQUEST_TIMEOUT_MS = 8_000;
+
+/** How often the daemon re-verifies the stored key (daily). */
+export const LICENSE_VERIFY_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+
+/**
+ * Offline grace window. A paid plan stays active for this long after the last
+ * SUCCESSFUL verify, so a network blip (or the authority being briefly down)
+ * never locks a paying user out. Beyond it, the entitlement downgrades to free
+ * until the key is confirmed again.
+ */
+export const LICENSE_GRACE_MS = 7 * 24 * 60 * 60 * 1_000;
